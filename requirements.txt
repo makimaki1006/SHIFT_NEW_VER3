@@ -1,26 +1,26 @@
-# ───── core ─────
-pandas==2.2.*          # 3.12 対応
-numpy==1.26.*          # 3.12 対応
+# ----- core -----
+pandas==2.2.*          # Compatible with Python 3.12
+numpy==1.26.*          # Compatible with Python 3.12
 openpyxl==3.1.*        # Excel I/O
-XlsxWriter>=3.2        # ★ 最低 3.2 系を明示
+XlsxWriter>=3.2        # Require at least the 3.2 series
 
-# ─── visual / web ───
+# --- visual / web ---
 streamlit>=1.44        # GUI
-dash==2.16.*           # 内蔵 Dash
-dash-bootstrap-components>=1.7  # ★ 1.7 以降で互換確認
+dash==3.2.*            # Dash 3.x with React 18
+dash-bootstrap-components>=1.7.1  # React 18 compatible build
 plotly>=5.20
 streamlit-plotly-events>=0.0.6
 matplotlib>=3.8
 
-# ───── ML ─────
+# ----- ML -----
 scikit-learn==1.4.1.post1
 lightgbm==4.3.0
-prophet==1.1.6         # ★ Python 3.12 で動作する最新版
+prophet==1.1.6         # Latest release that supports Python 3.12
 stable-baselines3>=2.3
-gymnasium>=0.29        # ★ 明示
-torch>=2.3             # ★ CPU/GPU どちらでも可
+gymnasium>=0.29        # Explicit minimum
+torch>=2.3             # Works on CPU or GPU
 
-# ─── misc / utils ───
+# --- misc / utils ---
 python-pptx>=0.6
 ruff                   # Linter
 pytest                 # Tests
