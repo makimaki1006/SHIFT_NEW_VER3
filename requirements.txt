@@ -8,6 +8,7 @@ XlsxWriter>=3.2        # Require at least the 3.2 series
 streamlit>=1.44        # GUI
 dash==3.2.*            # Dash 3.x with React 18
 dash-bootstrap-components>=1.7.1  # React 18 compatible build
+dash-cytoscape>=0.3.0  # Network graph component for Dash
 plotly>=5.20
 streamlit-plotly-events>=0.0.6
 matplotlib>=3.8
@@ -15,14 +16,22 @@ gunicorn>=22.0         # Production WSGI server for Render deployment
 
 # ----- ML -----
 scikit-learn==1.4.1.post1  # Compatible with NumPy 1.26
+scipy>=1.11            # Scientific computing library (used by multiple analyzers)
 lightgbm==4.3.0
+xgboost>=2.0           # Gradient boosting library (turnover_prediction.py)
 prophet==1.1.6         # Latest release that supports Python 3.12
 statsmodels>=0.14.0    # Statistical models and tests (needed by forecast.py)
+pmdarima>=2.0          # Auto ARIMA (optional, used in forecast.py)
 stable-baselines3>=2.3
 gymnasium>=0.29        # Explicit minimum
 torch>=2.3             # Works on CPU or GPU
+tensorflow>=2.15       # Deep learning framework (fatigue_prediction.py)
 
 # --- misc / utils ---
 python-pptx>=0.6
+networkx>=3.1          # Graph theory and network analysis
+ortools>=9.6           # Google OR-Tools for optimization (assignment.py)
+psutil>=5.9            # System and process utilities
+pyarrow>=14.0          # Apache Arrow for Parquet I/O
 ruff                   # Linter
 pytest                 # Tests
