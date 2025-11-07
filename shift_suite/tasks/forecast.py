@@ -1,14 +1,15 @@
 """
 shift_suite.tasks.forecast  v1.5.0 – 休暇・履歴対応
 ────────────────────────────────────────────────────────
-■ v1.5 変更点 ★
+■ v1.5 変更点
   1. 予測期間の既定を 30 日に延長
   2. build_demand_series / forecast_need が leave_analysis.csv を任意で受け付け
   3. MAPE 計算を 0 除算回避処理付きに修正
   4. forecast_need() が生成する out_df に “model” 列を必ず付与
   5. forecast_need() が祝日データを受け取り exogenous 変数として利用
   6. forecast_need() 実行履歴を ``forecast_history.csv`` に追記
-  7. 直近の履歴 MAPE が閾値を超える場合はモデル選択を調整
+  7. 直近の履歴 MAPE が閾値を超える場合はモデル選択と
+     seasonal パラメータを自動調整
 """
 
 from __future__ import annotations
@@ -24,18 +25,20 @@ import numpy as np
 import pandas as pd
 import statsmodels.api as sm
 
-from .utils import log, save_df_xlsx, write_meta
+from shift_suite.config import get as get_config
+
+from .utils import log, save_df_parquet, write_meta
 
 # ────────────────── pmdarima (optional) ──────────────────
 try:
     import pmdarima as pm
 
     _HAS_PMDARIMA = True
-    log.info("[forecast] pmdarima detected — auto_arima enabled")
+    log.info("[forecast] pmdarima detected -- auto_arima enabled")
 except ImportError:
     _HAS_PMDARIMA = False
     log.warning(
-        "[forecast] pmdarima not installed — ARIMA auto-search disabled; "
+        "[forecast] pmdarima not installed -- ARIMA auto-search disabled; "
         "run `pip install pmdarima` to enable"
     )
 
@@ -43,6 +46,7 @@ except ImportError:
 _EXCEL_EPOCH = dt.date(1899, 12, 30)
 _COL_RE = re.compile(r"\s*(\d{1,2})[/-](\d{1,2})")  # 3/1  03-01
 _SUMMARY_COLS = {"need", "upper", "staff", "lack", "excess"}
+
 
 # ────────────────── ヘルパ ──────────────────
 def _excel_serial_to_date(num: int | float) -> Optional[dt.date]:
@@ -119,7 +123,7 @@ def build_demand_series(
     raise_on_empty: bool = True,
     leave_csv: Path | None = None,
 ) -> Path:
-    """heat_ALL.xlsx → 需要系列 CSV(ds,y) を生成
+    """heat_ALL.parquet → 需要系列 CSV(ds,y) を生成
 
     Parameters
     ----------
@@ -136,14 +140,18 @@ def build_demand_series(
         休暇取得数を ``leave_…`` 列として付与する
     """
     log.info("[forecast] build_demand_series start")
-    heat = pd.read_excel(heat_xlsx, index_col=0)
+    # heat_xlsx が .xlsx で終わる場合と .parquet で終わる場合の両方に対応
+    if str(heat_xlsx).endswith(".xlsx"):
+        heat = pd.read_excel(heat_xlsx, index_col=0)
+    else:
+        heat = pd.read_parquet(heat_xlsx)
 
     date_map = _extract_date_columns(heat)
     if not date_map:
         msg = "有効な日付列が 1 つも見つかりません"
         if raise_on_empty:
             raise ValueError(msg)
-        warnings.warn(msg)
+        warnings.warn(msg, stacklevel=2)
         pd.DataFrame(columns=["ds", "y"]).to_csv(csv_out, index=False)
         return csv_out
 
@@ -156,16 +164,19 @@ def build_demand_series(
     if leave_csv and Path(leave_csv).exists():
         try:
             leave_df = pd.read_csv(leave_csv, parse_dates=["date"])
-            pivot = (
-                leave_df.pivot_table(
-                    index="date",
-                    columns="leave_type",
-                    values="total_leave_days",
-                    aggfunc="sum",
-                    fill_value=0,
-                )
+            pivot = leave_df.pivot_table(
+                index="date",
+                columns="leave_type",
+                values="total_leave_days",
+                aggfunc="sum",
+                fill_value=0,
             )
-            pivot = pivot.add_prefix("leave_").reset_index().rename(columns={"date": "ds"})
+            pivot = (
+                pivot.add_prefix("leave_").reset_index().rename(columns={"date": "ds"})
+            )
+            # unify merge key dtype to avoid warnings
+            df["ds"] = pd.to_datetime(df["ds"])
+            pivot["ds"] = pd.to_datetime(pivot["ds"])
             df = df.merge(pivot, on="ds", how="left").fillna(0)
         except Exception as e:
             log.warning(f"[forecast] leave_csv load failed: {e}")
@@ -184,7 +195,7 @@ def forecast_need(
     *,
     choose: str = "auto",  # "auto" | "arima" | "ets"
     seasonal: str = "add",
-    periods: int = 30,
+    periods: int | None = None,
     leave_csv: Path | None = None,
     holidays: Sequence[dt.date] | None = None,
     log_csv: Path | None = None,
@@ -201,8 +212,9 @@ def forecast_need(
         モデル選択方法
     seasonal : str, default "add"
         ETS モデルの季節成分タイプ
-    periods : int, default 30
-        予測期間（日数）
+    periods : int | None, default None
+        予測期間（日数）。``None`` の場合は ``config.json`` の
+        ``forecast_period_days`` 値（既定 30 日）を使用
     leave_csv : Path | None, optional
         ``leave_analysis.csv`` を与えると休暇取得数を説明変数として利用
     holidays : Sequence[datetime.date] | None, optional
@@ -219,6 +231,9 @@ def forecast_need(
     log.info("[forecast] forecast_need start")
     df = pd.read_csv(demand_csv, parse_dates=["ds"])
 
+    if periods is None:
+        periods = int(get_config("forecast_period_days", 30))
+
     log_csv = Path(log_csv) if log_csv else excel_out.parent / "forecast_history.csv"
 
     if holidays:
@@ -234,8 +249,17 @@ def forecast_need(
             recent_mape = hist["mape"].tail(5).mean()
             if choose == "auto" and recent_mape > 0.25:
                 log.info("[forecast] recent MAPE high → prefer ARIMA")
+                warnings.warn(
+                    "Recent forecast MAPE above 0.25 – using ARIMA instead of ETS",
+                    stacklevel=2,
+                )
                 choose = "arima"
             if seasonal == "add" and recent_mape > 0.25:
+                log.info("[forecast] recent MAPE high → switch seasonal to 'mul'")
+                warnings.warn(
+                    "Recent forecast MAPE above 0.25 – switching seasonal parameter to 'mul'",
+                    stacklevel=2,
+                )
                 seasonal = "mul"
         except Exception as e:
             log.warning(f"[forecast] history read failed: {e}")
@@ -243,30 +267,30 @@ def forecast_need(
     if leave_csv and Path(leave_csv).exists():
         try:
             leave_df = pd.read_csv(leave_csv, parse_dates=["date"])
-            pivot = (
-                leave_df.pivot_table(
-                    index="date",
-                    columns="leave_type",
-                    values="total_leave_days",
-                    aggfunc="sum",
-                    fill_value=0,
-                )
+            pivot = leave_df.pivot_table(
+                index="date",
+                columns="leave_type",
+                values="total_leave_days",
+                aggfunc="sum",
+                fill_value=0,
             )
-            pivot = pivot.add_prefix("leave_").reset_index().rename(columns={"date": "ds"})
+            pivot = (
+                pivot.add_prefix("leave_").reset_index().rename(columns={"date": "ds"})
+            )
             df = df.merge(pivot, on="ds", how="left").fillna(0)
         except Exception as e:
             log.warning(f"[forecast] leave_csv load failed: {e}")
 
     # ───── データ不足 → Naive ─────
     if len(df) < 2 or df["y"].sum() < 2:
-        warnings.warn("実績データが不足しているため Naive 予測で継続")
+        warnings.warn("実績データが不足しているため Naive 予測で継続", stacklevel=2)
         last_val = df["y"].iloc[-1] if not df.empty else 0
         future_dates = pd.date_range(
             df["ds"].max() + dt.timedelta(days=1) if not df.empty else dt.date.today(),
             periods=periods,
         )
         out_df = pd.DataFrame({"ds": future_dates, "yhat": last_val, "model": "Naive"})
-        save_df_xlsx(out_df, excel_out)
+        save_df_parquet(out_df, excel_out)
         write_meta(
             excel_out.with_suffix(".json"),
             selected_model="Naive",
@@ -301,13 +325,13 @@ def forecast_need(
                 error_action="ignore",
             )
         future_exog = (
-            pd.DataFrame([df[exog_cols].iloc[-1]] * periods)
-            if exog_cols
-            else None
+            pd.DataFrame([df[exog_cols].iloc[-1]] * periods) if exog_cols else None
         )
         if future_exog is not None:
             if "holiday" in exog_cols:
-                future_exog["holiday"] = [1 if d.date() in holiday_set else 0 for d in future_dates]
+                future_exog["holiday"] = [
+                    1 if d.date() in holiday_set else 0 for d in future_dates
+                ]
         arima_fc = arima_mod.predict(n_periods=periods, exogenous=future_exog)
         try:
             train_y = getattr(arima_mod, "y", arima_mod.arima_res_.data.endog)
@@ -330,9 +354,9 @@ def forecast_need(
 
     # ───── 予測結果組立 ─────
     out_df = pd.DataFrame({"ds": future_dates, "yhat": forecast})
-    out_df["model"] = sel  # ★ 追加: 常に model 列を付与
+    out_df["model"] = sel  #  追加: 常に model 列を付与
 
-    save_df_xlsx(out_df, excel_out)
+    save_df_parquet(out_df, excel_out)
 
     write_meta(
         excel_out.with_suffix(".json"),
@@ -342,12 +366,22 @@ def forecast_need(
         periods=periods,
         created=str(dt.datetime.now()),
     )
+
+    # text summary
     try:
-        hist_row = pd.DataFrame({
-            "timestamp": [dt.datetime.now().isoformat()],
-            "model": [sel],
-            "mape": [float(np.round(sel_mape, 6))],
-        })
+        summary_fp = excel_out.with_suffix(".summary.txt")
+        lines = [f"model: {sel}", f"mape: {float(np.round(sel_mape, 4))}"]
+        summary_fp.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    except Exception as e:  # noqa: BLE001
+        log.debug(f"forecast summary write failed: {e}")
+    try:
+        hist_row = pd.DataFrame(
+            {
+                "timestamp": [dt.datetime.now().isoformat()],
+                "model": [sel],
+                "mape": [float(np.round(sel_mape, 6))],
+            }
+        )
         hist_row.to_csv(log_csv, mode="a", index=False, header=not log_csv.exists())
     except Exception as e:
         log.warning(f"[forecast] failed to update history: {e}")

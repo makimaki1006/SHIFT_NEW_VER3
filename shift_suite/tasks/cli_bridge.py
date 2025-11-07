@@ -1,19 +1,22 @@
 from __future__ import annotations
 
+import logging
 from argparse import ArgumentParser
 from pathlib import Path
+
 import pandas as pd
 
-from .data_loader import ShiftDataLoader
 from .analyzers import (
-    LeaveAnalyzer,
-    RestTimeAnalyzer,
-    WorkPatternAnalyzer,
     AttendanceBehaviorAnalyzer,
     CombinedScoreCalculator,
+    LeaveAnalyzer,
     LowStaffLoadAnalyzer,
+    RestTimeAnalyzer,
+    WorkPatternAnalyzer,
 )
+from .data_loader import ShiftDataLoader
 
+log = logging.getLogger(__name__)
 
 DEF_CHOICES = ["leave", "rest", "work", "attendance", "score", "lowstaff", "all"]
 
@@ -36,6 +39,9 @@ def main(argv: list[str] | None = None) -> list[Path]:
     )
     args = parser.parse_args(argv)
 
+    if args.threshold <= 0:
+        parser.error("--threshold must be a positive number")
+
     loader = ShiftDataLoader(args.csv)
     df = loader.load()
 
@@ -48,7 +54,7 @@ def main(argv: list[str] | None = None) -> list[Path]:
         leave_res = LeaveAnalyzer().analyze(df)
         fp = out_dir / "leave_analysis.csv"
         leave_res.to_csv(fp, index=False)
-        print(f"Results saved to {fp}")
+        log.info("Results saved to %s", fp)
         results.append(fp)
 
     if args.analysis in ("rest", "score", "all"):
@@ -56,14 +62,14 @@ def main(argv: list[str] | None = None) -> list[Path]:
         rest_res = rta.analyze(df)
         fp = out_dir / "rest_time.csv"
         rest_res.to_csv(fp, index=False)
-        print(f"Results saved to {fp}")
+        log.info("Results saved to %s", fp)
         results.append(fp)
 
         monthly_rest = rta.monthly(rest_res)
         if not monthly_rest.empty:
             fp_m = out_dir / "rest_time_monthly.csv"
             monthly_rest.to_csv(fp_m, index=False)
-            print(f"Results saved to {fp_m}")
+            log.info("Results saved to %s", fp_m)
             results.append(fp_m)
     else:
         rest_res = None
@@ -73,14 +79,14 @@ def main(argv: list[str] | None = None) -> list[Path]:
         work_res = wpa.analyze(df)
         fp = out_dir / "work_patterns.csv"
         work_res.to_csv(fp, index=False)
-        print(f"Results saved to {fp}")
+        log.info("Results saved to %s", fp)
         results.append(fp)
 
         monthly_work = wpa.analyze_monthly(df)
         if not monthly_work.empty:
             fp_m = out_dir / "work_pattern_monthly.csv"
             monthly_work.to_csv(fp_m, index=False)
-            print(f"Results saved to {fp_m}")
+            log.info("Results saved to %s", fp_m)
             results.append(fp_m)
     else:
         work_res = None
@@ -89,7 +95,7 @@ def main(argv: list[str] | None = None) -> list[Path]:
         attend_res = AttendanceBehaviorAnalyzer().analyze(df)
         fp = out_dir / "attendance.csv"
         attend_res.to_csv(fp, index=False)
-        print(f"Results saved to {fp}")
+        log.info("Results saved to %s", fp)
         results.append(fp)
     else:
         attend_res = None
@@ -98,7 +104,7 @@ def main(argv: list[str] | None = None) -> list[Path]:
         low_res = LowStaffLoadAnalyzer().analyze(df, threshold=args.threshold)
         fp = out_dir / "low_staff_load.csv"
         low_res.to_csv(fp, index=False)
-        print(f"Results saved to {fp}")
+        log.info("Results saved to %s", fp)
         results.append(fp)
 
     if args.analysis in ("score", "all"):
@@ -109,7 +115,7 @@ def main(argv: list[str] | None = None) -> list[Path]:
         )
         fp = out_dir / "combined_score.csv"
         score_res.to_csv(fp, index=False)
-        print(f"Results saved to {fp}")
+        log.info("Results saved to %s", fp)
         results.append(fp)
 
     return results

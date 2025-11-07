@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 
+
 class RestTimeAnalyzer:
     """Analyze rest hours between working days and summarize results monthly.
 
@@ -38,13 +39,24 @@ class RestTimeAnalyzer:
 
     def monthly(self, daily_df: pd.DataFrame) -> pd.DataFrame:
         """Aggregate daily rest time DataFrame to monthly averages."""
-        if daily_df.empty or not {"staff", "date", "rest_hours"}.issubset(daily_df.columns):
+        if daily_df.empty or not {"staff", "date", "rest_hours"}.issubset(
+            daily_df.columns
+        ):
             return pd.DataFrame()
 
         df = daily_df.copy()
         df["month"] = pd.to_datetime(df["date"]).dt.to_period("M")
-        monthly = (
-            df.groupby(["staff", "month"])["rest_hours"].mean().reset_index()
-        )
+        monthly = df.groupby(["staff", "month"])["rest_hours"].mean().reset_index()
         monthly["month"] = monthly["month"].astype(str)
         return monthly
+
+    def consecutive_leave_frequency(
+        self, daily_df: pd.DataFrame, threshold_hours: float = 48.0
+    ) -> pd.Series:
+        """Return frequency of rest periods above ``threshold_hours`` per staff."""
+        if daily_df.empty or not {"staff", "rest_hours"}.issubset(daily_df.columns):
+            return pd.Series(dtype=float)
+
+        df = daily_df.copy()
+        df["long_break"] = df["rest_hours"] >= threshold_hours
+        return df.groupby("staff")["long_break"].mean()
