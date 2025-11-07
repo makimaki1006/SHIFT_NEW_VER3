@@ -17,6 +17,7 @@ gunicorn>=22.0         # Production WSGI server for Render deployment
 scikit-learn==1.4.1.post1  # Compatible with NumPy 1.26
 lightgbm==4.3.0
 prophet==1.1.6         # Latest release that supports Python 3.12
+statsmodels>=0.14.0    # Statistical models and tests (needed by forecast.py)
 stable-baselines3>=2.3
 gymnasium>=0.29        # Explicit minimum
 torch>=2.3             # Works on CPU or GPU
