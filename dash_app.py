@@ -8256,6 +8256,10 @@ def register_shortage_callbacks(app_instance):
     @safe_callback
     def update_shortage_ratio_heatmap(scope, detail_values, session_id, metadata):
         """不足率ヒートマップを更新"""
+        # Dash の ALL パターンは通常リストとして渡すが、環境により複数引数になる場合を防御
+        if not isinstance(detail_values, list):
+            detail_values = [detail_values] if detail_values else []
+
         # Session ID が未設定の場合は何も返さない
         if not session_id:
             return None
@@ -10438,8 +10442,13 @@ def register_interactive_callbacks(app_instance):
          State('session-metadata', 'data')],
         prevent_initial_call=True
     )
+    @safe_callback
     def update_optimization_content(scope, detail_values, session_id, metadata):
         """Optimization タブの動的更新 (Phase 2+ エラーハンドリング付き)"""
+        # Dash の ALL パターンは通常リストとして渡すが、環境により複数引数になる場合を防御
+        if not isinstance(detail_values, list):
+            detail_values = [detail_values] if detail_values else []
+
         # Sessionとscenario dirを設定
         session = get_session(session_id)
         if not session:
@@ -10575,8 +10584,15 @@ def register_interactive_callbacks(app_instance):
          State('session-metadata', 'data')],
         prevent_initial_call=True
     )
+    @safe_callback
     def update_cost_analysis_content(by_key, all_wages, all_wage_ids, session_id, metadata):
         """Cost タブの動的更新 (Phase 2+ エラーハンドリング付き)"""
+        # Dash の ALL パターンは通常リストとして渡すが、環境により複数引数になる場合を防御
+        if not isinstance(all_wages, list):
+            all_wages = [all_wages] if all_wages else []
+        if not isinstance(all_wage_ids, list):
+            all_wage_ids = [all_wage_ids] if all_wage_ids else []
+
         # Sessionとscenario dirを設定
         session = get_session(session_id)
         if not session:
