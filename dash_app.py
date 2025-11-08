@@ -8006,10 +8006,17 @@ def update_tab_visibility(active_tab, selected_scenario, data_status):
     Input({'type': 'heatmap-filter-role', 'index': ALL}, 'value'),
 )
 @safe_callback
-def update_employment_options(selected_roles):
+def update_employment_options(*args):
     """職種選択に応じて雇用形態フィルターを更新"""
-    # Dashの ALL パターンは通常リストとして渡すが、
-    # 念のためタプルや複数引数の場合もハンドリング
+    # Dashの ALL パターンは環境により引数の渡し方が異なる
+    # Gunicorn環境では複数引数として渡される場合がある
+    if len(args) == 1:
+        selected_roles = args[0]
+    else:
+        # 複数引数の場合は最初の引数のみ使用
+        selected_roles = args[0] if args else []
+
+    # リスト型への正規化
     if not isinstance(selected_roles, list):
         selected_roles = [selected_roles] if selected_roles else []
 
