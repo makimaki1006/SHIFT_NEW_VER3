@@ -5,7 +5,7 @@ services:
     region: singapore  # アジアに近いリージョン（日本から）
     plan: free  # 無料プランから開始（後でアップグレード可能）
     buildCommand: pip install --no-cache-dir -r requirements.txt
-    startCommand: gunicorn run_dash_server_production:server --bind 0.0.0.0:$PORT --workers 2 --timeout 120
+    startCommand: gunicorn run_dash_server_production:server --bind 0.0.0.0:$PORT --workers 1 --timeout 120
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.0
