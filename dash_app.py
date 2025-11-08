@@ -8008,10 +8008,17 @@ def update_tab_visibility(active_tab, selected_scenario, data_status):
 @safe_callback
 def update_employment_options(selected_roles):
     """職種選択に応じて雇用形態フィルターを更新"""
+    # Dashの ALL パターンは通常リストとして渡すが、
+    # 念のためタプルや複数引数の場合もハンドリング
+    if not isinstance(selected_roles, list):
+        selected_roles = [selected_roles] if selected_roles else []
+
     aggregated_df = data_get('pre_aggregated_data')
     if aggregated_df is None or aggregated_df.empty:
         default_options = [{'label': 'すべて', 'value': 'all'}]
-        return [default_options, default_options], ['all', 'all']
+        # selected_rolesの数だけdefault_optionsを返す
+        num_outputs = len(selected_roles) if selected_roles else 2
+        return [default_options] * num_outputs, ['all'] * num_outputs
 
     output_options = []
     for role in selected_roles:
