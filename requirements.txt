@@ -24,7 +24,7 @@ statsmodels==0.14.1    # Statistical models and tests (needed by forecast.py) - 
 # --- misc / utils ---
 python-pptx==0.6.23    # Version locked for consistency
 networkx==3.1          # Graph theory and network analysis - version locked
-ortools==9.6.2534      # Google OR-Tools for optimization (assignment.py) - version locked
+# ortools removed - version 9.6.2534 no longer available on PyPI (optional dependency in assignment.py)
 psutil==5.9.8          # System and process utilities - version locked
 pyarrow==14.0.2        # Apache Arrow for Parquet I/O - version locked
 ruff==0.3.4            # Linter - version locked
