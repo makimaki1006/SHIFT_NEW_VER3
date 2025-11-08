@@ -16,7 +16,7 @@ gunicorn==22.0.0       # Production WSGI server for Render deployment - version 
 
 # ----- ML (Essential only) -----
 scikit-learn==1.4.1.post1  # Compatible with NumPy 1.26
-scipy==1.11.4          # Scientific computing library (used by multiple analyzers) - version locked
+scipy==1.13.1          # Scientific computing library - Python 3.13 compatible with pre-built wheels
 lightgbm==4.3.0
 xgboost==2.0.3         # Gradient boosting library (turnover_prediction.py) - version locked
 statsmodels==0.14.1    # Statistical models and tests (needed by forecast.py) - version locked
