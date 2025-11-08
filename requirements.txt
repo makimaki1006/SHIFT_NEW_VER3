@@ -1,31 +1,31 @@
 # ----- core -----
 pandas==2.2.*          # Compatible with Python 3.12+
 numpy==1.26.*          # NumPy 1.26 for scikit-learn 1.4.1 compatibility
-openpyxl==3.1.*        # Excel I/O
-XlsxWriter>=3.2        # Require at least the 3.2 series
+openpyxl==3.1.*        # Excel I/O (minor version flexibility OK for Excel compatibility)
+XlsxWriter==3.2.0      # Excel writing library - version locked
 
 # --- visual / web ---
-streamlit>=1.44        # GUI
+streamlit==1.44.0      # GUI - version locked for consistency
 dash==3.2.*            # Dash 3.x with React 18
-dash-bootstrap-components>=1.7.1  # React 18 compatible build
-dash-cytoscape>=0.3.0  # Network graph component for Dash
-plotly>=5.20
-streamlit-plotly-events>=0.0.6
-matplotlib>=3.8
-gunicorn>=22.0         # Production WSGI server for Render deployment
+dash-bootstrap-components==1.7.1  # React 18 compatible build - version locked
+dash-cytoscape==0.3.0  # Network graph component for Dash - version locked
+plotly==5.20.0         # Version locked for consistency
+streamlit-plotly-events==0.0.6  # Version locked
+matplotlib==3.8.4      # Version locked for consistency
+gunicorn==22.0.0       # Production WSGI server for Render deployment - version locked
 
 # ----- ML (Essential only) -----
 scikit-learn==1.4.1.post1  # Compatible with NumPy 1.26
-scipy>=1.11            # Scientific computing library (used by multiple analyzers)
+scipy==1.11.4          # Scientific computing library (used by multiple analyzers) - version locked
 lightgbm==4.3.0
-xgboost>=2.0           # Gradient boosting library (turnover_prediction.py)
-statsmodels>=0.14.0    # Statistical models and tests (needed by forecast.py)
+xgboost==2.0.3         # Gradient boosting library (turnover_prediction.py) - version locked
+statsmodels==0.14.1    # Statistical models and tests (needed by forecast.py) - version locked
 
 # --- misc / utils ---
-python-pptx>=0.6
-networkx>=3.1          # Graph theory and network analysis
-ortools>=9.6           # Google OR-Tools for optimization (assignment.py)
-psutil>=5.9            # System and process utilities
-pyarrow>=14.0          # Apache Arrow for Parquet I/O
-ruff                   # Linter
-pytest                 # Tests
+python-pptx==0.6.23    # Version locked for consistency
+networkx==3.1          # Graph theory and network analysis - version locked
+ortools==9.6.2534      # Google OR-Tools for optimization (assignment.py) - version locked
+psutil==5.9.8          # System and process utilities - version locked
+pyarrow==14.0.2        # Apache Arrow for Parquet I/O - version locked
+ruff==0.3.4            # Linter - version locked
+pytest==8.1.1          # Tests - version locked
