@@ -127,8 +127,8 @@ RATIO_PLACEHOLDER = "利用できます"
 # Phase 3-1: Data Validation and Error Handling
 # -----------------------------------------------------------------------------
 
-# ZIP file size limit (100MB)
-MAX_ZIP_SIZE_BYTES = 100 * 1024 * 1024
+# ZIP file size limit (10MB - Render Free plan limit)
+MAX_ZIP_SIZE_BYTES = 10 * 1024 * 1024
 # Maximum number of files in ZIP (Zip Bomb protection)
 MAX_ZIP_FILES = 10000
 # Maximum total uncompressed size (Zip Bomb protection)
@@ -952,7 +952,20 @@ def _extract_zip_with_security_checks(
                     f"最大サイズ: {max_mb:.0f}MB"
                 )
 
-            # Extract files
+            # Extract files with path traversal validation (Zip Slip protection)
+            for member in zf.namelist():
+                member_path = Path(temp_root) / member
+                # Validate that the path is within temp_root (prevent path traversal)
+                try:
+                    member_path.resolve().relative_to(temp_root.resolve())
+                except ValueError:
+                    temp_dir.cleanup()
+                    raise ValueError(
+                        f"❌ ZIPファイルに不正なパスが含まれています。\n"
+                        f"ファイル: {member}\n"
+                        f"セキュリティ上の理由によりアップロードを拒否します。"
+                    )
+
             zf.extractall(temp_root)
             log.info(f"[ZIP検証] ファイル数: {file_count}, 解凍サイズ: {total_size / (1024 * 1024):.1f}MB")
 
