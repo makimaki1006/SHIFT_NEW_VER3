@@ -13,5 +13,4 @@ services:
         value: production
       - key: SESSION_TIMEOUT
         value: 3600
-      - key: MAX_UPLOAD_SIZE
-        value: 100
+      # MAX_UPLOAD_SIZE削除 (Deploy 20.4): dash_app.pyのMAX_ZIP_SIZE_BYTES=10MBのみ使用

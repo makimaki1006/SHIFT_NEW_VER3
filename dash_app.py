@@ -686,7 +686,7 @@ def initialize_memory_manager() -> None:
             _memory_manager = IntelligentMemoryManager(
                 max_memory_percent=70.0,
                 cleanup_threshold_percent=80.0,
-                emergency_threshold_percent=90.0,
+                emergency_threshold_percent=85.0,  # Deploy 20.4: 90% → 85% (OOM killer対策)
                 monitoring_interval=30
             )
             _memory_manager.start_monitoring()
@@ -1809,14 +1809,31 @@ app.index_string = '''
 # Flask error handlers
 @server.errorhandler(Exception)
 def handle_exception(e):
-    """Catch all unhandled exceptions."""
+    """
+    Catch all unhandled exceptions.
+
+    Security Note:
+    - Production環境では詳細なトレースバックを公開しない
+    - DASH_ENV=production の場合、一般的なエラーメッセージのみ返す
+    - 開発環境では詳細なデバッグ情報を提供
+    """
     log.exception("Unhandled exception in request:")
-    error_info = {
-        "error": str(e),
-        "type": type(e).__name__,
-        "traceback": traceback.format_exc(),
-    }
-    return jsonify(error_info), 200
+
+    # 本番環境では詳細を隠す (Deploy 20.4 セキュリティ修正)
+    if os.environ.get('DASH_ENV') == 'production':
+        error_info = {
+            "error": "An internal error occurred. Please try again or contact support.",
+            "type": "InternalError"
+        }
+        return jsonify(error_info), 500
+    else:
+        # 開発環境のみ詳細を返す
+        error_info = {
+            "error": str(e),
+            "type": type(e).__name__,
+            "traceback": traceback.format_exc(),
+        }
+        return jsonify(error_info), 500
 
 
 @server.errorhandler(500)
