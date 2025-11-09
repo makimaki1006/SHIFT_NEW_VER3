@@ -8274,9 +8274,32 @@ def register_shortage_callbacks(app_instance):
         State('session-metadata', 'data')
     )
     @safe_callback
-    def update_shortage_ratio_heatmap(scope, detail_values, session_id, metadata):
-        """不足率ヒートマップを更新"""
-        # Dash の ALL パターンは通常リストとして渡すが、環境により複数引数になる場合を防御
+    def update_shortage_ratio_heatmap(*args):
+        """
+        不足率ヒートマップを更新（Gunicorn対応版）
+
+        Gunicorn環境対応:
+        - *argsで引数を受け取り、環境差異を吸収
+        - ローカル環境とGunicorn環境の両方に対応
+        """
+        # 引数を展開（環境により異なる渡され方に対応）
+        if len(args) == 4:
+            # ローカル環境: scope, detail_values（リスト）, session_id, metadata
+            scope, detail_values, session_id, metadata = args
+        elif len(args) > 4:
+            # Gunicorn環境: scope, value1, value2, ..., session_id, metadata
+            # 最初がscope、最後の2つがsession_id/metadata
+            scope = args[0]
+            session_id, metadata = args[-2], args[-1]
+            detail_values = list(args[1:-2])
+        else:
+            # フォールバック（引数が不足している場合）
+            scope = args[0] if len(args) > 0 else None
+            detail_values = []
+            session_id = args[1] if len(args) > 1 else None
+            metadata = args[2] if len(args) > 2 else None
+
+        # リスト型への正規化（念のため）
         if not isinstance(detail_values, list):
             detail_values = [detail_values] if detail_values else []
 
@@ -10480,9 +10503,32 @@ def register_interactive_callbacks(app_instance):
         prevent_initial_call=True
     )
     @safe_callback
-    def update_optimization_content(scope, detail_values, session_id, metadata):
-        """Optimization タブの動的更新 (Phase 2+ エラーハンドリング付き)"""
-        # Dash の ALL パターンは通常リストとして渡すが、環境により複数引数になる場合を防御
+    def update_optimization_content(*args):
+        """
+        Optimization タブの動的更新（Gunicorn対応版）
+
+        Gunicorn環境対応:
+        - *argsで引数を受け取り、環境差異を吸収
+        - ローカル環境とGunicorn環境の両方に対応
+        """
+        # 引数を展開（環境により異なる渡され方に対応）
+        if len(args) == 4:
+            # ローカル環境: scope, detail_values（リスト）, session_id, metadata
+            scope, detail_values, session_id, metadata = args
+        elif len(args) > 4:
+            # Gunicorn環境: scope, value1, value2, ..., session_id, metadata
+            # 最初がscope、最後の2つがsession_id/metadata
+            scope = args[0]
+            session_id, metadata = args[-2], args[-1]
+            detail_values = list(args[1:-2])
+        else:
+            # フォールバック（引数が不足している場合）
+            scope = args[0] if len(args) > 0 else None
+            detail_values = []
+            session_id = args[1] if len(args) > 1 else None
+            metadata = args[2] if len(args) > 2 else None
+
+        # リスト型への正規化（念のため）
         if not isinstance(detail_values, list):
             detail_values = [detail_values] if detail_values else []
 
@@ -10622,9 +10668,38 @@ def register_interactive_callbacks(app_instance):
         prevent_initial_call=True
     )
     @safe_callback
-    def update_cost_analysis_content(by_key, all_wages, all_wage_ids, session_id, metadata):
-        """Cost タブの動的更新 (Phase 2+ エラーハンドリング付き)"""
-        # Dash の ALL パターンは通常リストとして渡すが、環境により複数引数になる場合を防御
+    def update_cost_analysis_content(*args):
+        """
+        Cost タブの動的更新（Gunicorn対応版）
+
+        Gunicorn環境対応:
+        - *argsで引数を受け取り、環境差異を吸収
+        - ローカル環境とGunicorn環境の両方に対応
+        - 2つのALLパターン引数（all_wages, all_wage_ids）を処理
+        """
+        # 引数を展開（環境により異なる渡され方に対応）
+        if len(args) == 5:
+            # ローカル環境: by_key, all_wages（リスト）, all_wage_ids（リスト）, session_id, metadata
+            by_key, all_wages, all_wage_ids, session_id, metadata = args
+        elif len(args) > 5:
+            # Gunicorn環境: by_key, wage1, wage2, ..., id1, id2, ..., session_id, metadata
+            # 最初がby_key、最後の2つがsession_id/metadata
+            by_key = args[0]
+            session_id, metadata = args[-2], args[-1]
+            # 中間の値を2等分（前半がwages、後半がids - 同じ長さと仮定）
+            middle_args = args[1:-2]
+            mid_point = len(middle_args) // 2
+            all_wages = list(middle_args[:mid_point])
+            all_wage_ids = list(middle_args[mid_point:])
+        else:
+            # フォールバック（引数が不足している場合）
+            by_key = args[0] if len(args) > 0 else None
+            all_wages = []
+            all_wage_ids = []
+            session_id = args[1] if len(args) > 1 else None
+            metadata = args[2] if len(args) > 2 else None
+
+        # リスト型への正規化（念のため）
         if not isinstance(all_wages, list):
             all_wages = [all_wages] if all_wages else []
         if not isinstance(all_wage_ids, list):
