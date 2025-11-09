@@ -1112,12 +1112,16 @@ def _build_scenario_data(path: Path) -> ScenarioData:
         roles = sorted(shortage_role_summary["role"].dropna().unique().tolist())
     elif "role" in pre_aggregated.columns:
         roles = sorted(pre_aggregated["role"].dropna().unique().tolist())
+    # Fixed: React Error #31 - convert numpy/pandas types to Python native types
+    roles = [r.item() if hasattr(r, 'item') else r for r in roles]
 
     employments: List[str] = []
     if not shortage_employment_summary.empty and "employment" in shortage_employment_summary.columns:
         employments = sorted(shortage_employment_summary["employment"].dropna().unique().tolist())
     elif "employment" in pre_aggregated.columns:
         employments = sorted(pre_aggregated["employment"].dropna().unique().tolist())
+    # Fixed: React Error #31 - convert numpy/pandas types to Python native types
+    employments = [e.item() if hasattr(e, 'item') else e for e in employments]
 
     if not roles:
         roles = ["all"]
@@ -4244,7 +4248,7 @@ def create_shortage_tab(selected_scenario: str = None) -> html.Div:
             content.append(dcc.RadioItems(
                 id='log-save-mode',
                 options=[{'label': '追記', 'value': 'append'}, {'label': '上書き', 'value': 'overwrite'}],
-                value='追記',
+                value='append',  # Fixed: React Error #31 - value must match option value
                 inline=True,
                 style={'marginTop': '10px'}
             ))
@@ -4662,13 +4666,16 @@ def _generate_cost_analysis_content(by_key='role', wages=None) -> html.Div:
     # デフォルト単価設定（wages省略時）
     if not wages:
         # 職種/雇用形態/スタッフ別の一律デフォルト単価
+        # Fixed: React Error #31 - convert numpy types to Python native types
         if by_key == 'role':
-            unique_values = long_df['role'].dropna().unique()
+            unique_values = long_df['role'].dropna().unique().tolist()
         elif by_key == 'employment':
-            unique_values = long_df['employment'].dropna().unique()
+            unique_values = long_df['employment'].dropna().unique().tolist()
         else:  # staff
-            unique_values = long_df['staff'].dropna().unique()
+            unique_values = long_df['staff'].dropna().unique().tolist()
 
+        # Ensure values are Python native types, not numpy types
+        unique_values = [val.item() if hasattr(val, 'item') else val for val in unique_values]
         wages = {val: 2000 for val in unique_values}  # デフォルト単価: 2000円/時間
 
     try:
@@ -5887,7 +5894,7 @@ def create_individual_analysis_tab() -> html.Div:
     if long_df.empty:
         return html.Div("分析の元となる勤務データ (long_df) が見つかりません。")
 
-    staff_list = sorted(long_df['staff'].unique())
+    staff_list = sorted(long_df['staff'].unique().tolist())  # Fixed: React Error #31 - add .tolist()
     default_staff = staff_list[0] if staff_list else None
 
     log.info(f"[Individual] Pattern A: デフォルト職員 = {default_staff}")
@@ -6112,7 +6119,11 @@ def create_team_analysis_tab() -> html.Div:
         except Exception as e:
             log.warning(f"[Team] Failed to sort initial values: {e}")
             sorted_values = unique_values
-        default_value_options = [{'label': str(val), 'value': val} for val in sorted_values]
+        # Fixed: React Error #31 - convert numpy/pandas types to Python native types
+        default_value_options = [
+            {'label': str(val), 'value': val.item() if hasattr(val, 'item') else val}
+            for val in sorted_values
+        ]
         log.info(f"[Team] Initial value options for key={default_key}: {len(default_value_options)} options")
 
     # 初期コンテンツ生成
@@ -8062,13 +8073,23 @@ def update_employment_options(*args):
         if role and role != 'all':
             employments = aggregated_df[aggregated_df['role'] == role][
                 'employment'
-            ].unique()
+            ].unique().tolist()
+            # Fixed: React Error #31 - convert numpy/pandas types to Python native types
+            employments = [
+                emp.item() if hasattr(emp, 'item') else emp
+                for emp in employments
+            ]
             new_options = (
                 [{'label': 'すべて', 'value': 'all'}]
                 + [{'label': emp, 'value': emp} for emp in sorted(employments)]
             )
         else:
-            all_employments = aggregated_df['employment'].unique()
+            all_employments = aggregated_df['employment'].unique().tolist()
+            # Fixed: React Error #31 - convert numpy/pandas types to Python native types
+            all_employments = [
+                emp.item() if hasattr(emp, 'item') else emp
+                for emp in all_employments
+            ]
             new_options = (
                 [{'label': 'すべて', 'value': 'all'}]
                 + [{'label': emp, 'value': emp} for emp in sorted(all_employments)]
@@ -10474,6 +10495,8 @@ def register_interactive_callbacks(app_instance):
                     return None
 
                 roles = long_df['role'].dropna().unique().tolist()
+                # Fixed: React Error #31 - convert numpy/pandas types to Python native types
+                roles = [r.item() if hasattr(r, 'item') else r for r in roles]
                 sorted_roles = sorted(roles, key=str)
 
                 log.info(f"[Optimization] Scope=role: Showing {len(sorted_roles)} role options")
@@ -10493,6 +10516,8 @@ def register_interactive_callbacks(app_instance):
                     return None
 
                 employments = long_df['employment'].dropna().unique().tolist()
+                # Fixed: React Error #31 - convert numpy/pandas types to Python native types
+                employments = [e.item() if hasattr(e, 'item') else e for e in employments]
                 sorted_employments = sorted(employments, key=str)
 
                 log.info(f"[Optimization] Scope=employment: Showing {len(sorted_employments)} employment options")
