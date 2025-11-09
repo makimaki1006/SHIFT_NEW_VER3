@@ -5895,6 +5895,8 @@ def create_individual_analysis_tab() -> html.Div:
         return html.Div("分析の元となる勤務データ (long_df) が見つかりません。")
 
     staff_list = sorted(long_df['staff'].unique().tolist())  # Fixed: React Error #31 - add .tolist()
+    # Deploy 20.4.2: numpy/pandas型をPythonネイティブ型に変換（React Error #31対策）
+    staff_list = [s.item() if hasattr(s, 'item') else s for s in staff_list]
     default_staff = staff_list[0] if staff_list else None
 
     log.info(f"[Individual] Pattern A: デフォルト職員 = {default_staff}")
@@ -6107,6 +6109,10 @@ def create_team_analysis_tab() -> html.Div:
                 default_key = col
                 default_value = long_df[col].iloc[0]
                 break
+
+    # Deploy 20.4.2: numpy/pandas型をPythonネイティブ型に変換（React Error #31対策）
+    if default_value is not None and hasattr(default_value, 'item'):
+        default_value = default_value.item()
 
     log.info(f"[Team] Pattern A: デフォルト条件 = {default_key}:{default_value}")
 
@@ -8869,7 +8875,9 @@ def update_wage_inputs(by_key):
     if long_df is None or long_df.empty or by_key not in long_df.columns:
         return html.P("単価設定のためのデータがありません。")
 
-    unique_keys: list[str] = sorted(long_df[by_key].dropna().unique())
+    unique_keys = sorted(long_df[by_key].dropna().unique().tolist())
+    # Fixed: React Error #31 - convert numpy/pandas types to Python native types
+    unique_keys = [k.item() if hasattr(k, 'item') else k for k in unique_keys]
     inputs = []
     for key in unique_keys:
         inputs.append(html.Div([
@@ -9139,7 +9147,13 @@ def update_blueprint_analysis_content(n_clicks, analysis_type, session_id, metad
             rules_table_data = rules_df.to_dict('records')
 
         staff_scores_df = blueprint_data.get('staff_level_scores', pd.DataFrame())
-        dropdown_options = [{'label': s, 'value': s} for s in staff_scores_df.index] if not staff_scores_df.empty else []
+        # Fixed: React Error #31 - convert numpy/pandas types to Python native types
+        if not staff_scores_df.empty:
+            staff_list = staff_scores_df.index.tolist()
+            staff_list = [s.item() if hasattr(s, 'item') else s for s in staff_list]
+            dropdown_options = [{'label': s, 'value': s} for s in staff_list]
+        else:
+            dropdown_options = []
 
         facts_df = blueprint_data.get('facts_df', pd.DataFrame())
         facts_table_data = []
