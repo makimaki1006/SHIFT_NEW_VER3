@@ -10428,6 +10428,9 @@ def register_interactive_callbacks(app_instance):
             # keyに対応する一意の値を取得
             unique_values = long_df[key].dropna().unique().tolist()
 
+            # Deploy 20.4.1: numpy/pandas型をPythonネイティブ型に変換（React Error #31対策）
+            unique_values = [v.item() if hasattr(v, 'item') else v for v in unique_values]
+
             # ソートしてオプションを生成
             try:
                 sorted_values = sorted(unique_values, key=str)
