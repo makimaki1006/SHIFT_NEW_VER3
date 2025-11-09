@@ -9712,12 +9712,12 @@ def _unused_update_progress_bar(n_intervals, progress_data):
 
 
 # 🧠 AI分析タブのコールバック
-@app.callback(
-    Output('ai-analysis-content', 'children'),
-    Input('ai-analysis-tab-container', 'style'),
-    State('scenario-dropdown', 'value'),
-    State('data-loaded', 'data'),
-)
+# @app.callback(
+#     Output('ai-analysis-content', 'children'),
+#     Input('ai-analysis-tab-container', 'style'),
+#     State('scenario-dropdown', 'value'),
+#     State('data-loaded', 'data'),
+# )
 # ===== COMMENTED OUT: initialize_ai_analysis_content (Phase 3.1: Legacy callback disabled after Phase 2+) =====
 # @safe_callback
 # def initialize_ai_analysis_content(style, selected_scenario, data_status):
