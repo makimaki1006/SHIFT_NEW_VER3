@@ -9712,13 +9712,13 @@ def _unused_update_progress_bar(n_intervals, progress_data):
 
 
 # 🧠 AI分析タブのコールバック
-@app.callback(
-    Output('ai-analysis-content', 'children'),
-    Input('ai-analysis-tab-container', 'style'),
-    State('scenario-dropdown', 'value'),
-    State('data-loaded', 'data'),
-)
 # ===== COMMENTED OUT: initialize_ai_analysis_content (Phase 3.1: Legacy callback disabled after Phase 2+) =====
+# @app.callback(
+#     Output('ai-analysis-content', 'children'),
+#     Input('ai-analysis-tab-container', 'style'),
+#     State('scenario-dropdown', 'value'),
+#     State('data-loaded', 'data'),
+# )
 # @safe_callback
 # def initialize_ai_analysis_content(style, selected_scenario, data_status):
 #     """AI分析タブの内容を初期化"""
@@ -9729,7 +9729,7 @@ def _unused_update_progress_bar(n_intervals, progress_data):
 #     except Exception as e:
 #         log.error(f"AI分析タブの初期化エラー: {str(e)}")
 #         return html.Div(f"エラーが発生しました: {str(e)}", style={'color': 'red'})
-# 
+#
 # 
 def create_ai_analysis_tab() -> html.Div:
     """Mind Reader分析タブを作成（app.py統一仕様）"""
