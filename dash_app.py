@@ -6120,6 +6120,8 @@ def create_team_analysis_tab() -> html.Div:
     default_value_options = []
     if default_key and default_key in long_df.columns:
         unique_values = long_df[default_key].dropna().unique().tolist()
+        # Deploy 20.4.3: numpy/pandas型をPythonネイティブ型に変換（React Error #31対策）
+        unique_values = [v.item() if hasattr(v, 'item') else v for v in unique_values]
         try:
             sorted_values = sorted(unique_values, key=str)
         except Exception as e:
@@ -6127,7 +6129,7 @@ def create_team_analysis_tab() -> html.Div:
             sorted_values = unique_values
         # Fixed: React Error #31 - convert numpy/pandas types to Python native types
         default_value_options = [
-            {'label': str(val), 'value': val.item() if hasattr(val, 'item') else val}
+            {'label': str(val), 'value': val}
             for val in sorted_values
         ]
         log.info(f"[Team] Initial value options for key={default_key}: {len(default_value_options)} options")
