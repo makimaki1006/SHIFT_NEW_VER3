@@ -10686,6 +10686,9 @@ def register_interactive_callbacks(app_instance):
                 log.warning(f"[Cost] Unknown by_key={by_key}")
                 return None
 
+            # Deploy 20.4.3: numpy/pandas型をPythonネイティブ型に変換（React Error #31対策）
+            categories = [c.item() if hasattr(c, 'item') else c for c in categories]
+
             if not categories:
                 log.warning(f"[Cost] No categories found for by_key={by_key}")
                 return None
