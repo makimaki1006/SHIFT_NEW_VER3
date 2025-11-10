@@ -3756,7 +3756,11 @@ def create_heatmap_tab() -> html.Div:
     - リアルタイム更新
     """
     roles = data_get('roles', [])
+    # Deploy 20.6: numpy/pandas型をPythonネイティブ型に変換（React Error #31対策）
+    roles = [r.item() if hasattr(r, 'item') else r for r in roles]
     employments = data_get('employments', [])
+    # Deploy 20.6: numpy/pandas型をPythonネイティブ型に変換（React Error #31対策）
+    employments = [e.item() if hasattr(e, 'item') else e for e in employments]
 
     # デフォルト値の決定
     default_role1 = roles[0] if len(roles) > 0 else 'all'
@@ -8291,6 +8295,8 @@ def register_shortage_callbacks(app_instance):
             return None
         elif scope == 'role':
             roles = data_get('roles', [])
+            # Deploy 20.6: numpy/pandas型をPythonネイティブ型に変換（React Error #31対策）
+            roles = [r.item() if hasattr(r, 'item') else r for r in roles]
             return html.Div([  # type: ignore
                 html.Label("職種選択"),  # type: ignore
                 dcc.Dropdown(
@@ -8302,6 +8308,8 @@ def register_shortage_callbacks(app_instance):
             ], style={'marginBottom': '10px'})
         elif scope == 'employment':
             employments = data_get('employments', [])
+            # Deploy 20.6: numpy/pandas型をPythonネイティブ型に変換（React Error #31対策）
+            employments = [e.item() if hasattr(e, 'item') else e for e in employments]
             return html.Div([  # type: ignore
                 html.Label("雇用形態選択"),  # type: ignore
                 dcc.Dropdown(
@@ -8697,6 +8705,8 @@ def update_opt_detail(scope):
         return None
     elif scope == 'role':
         roles = data_get('roles', [])
+        # Deploy 20.6: numpy/pandas型をPythonネイティブ型に変換（React Error #31対策）
+        roles = [r.item() if hasattr(r, 'item') else r for r in roles]
         return html.Div([  # type: ignore
             html.Label("職種選択"),  # type: ignore
             dcc.Dropdown(
@@ -8708,6 +8718,8 @@ def update_opt_detail(scope):
         ])
     elif scope == 'employment':
         employments = data_get('employments', [])
+        # Deploy 20.6: numpy/pandas型をPythonネイティブ型に変換（React Error #31対策）
+        employments = [e.item() if hasattr(e, 'item') else e for e in employments]
         return html.Div([  # type: ignore
             html.Label("雇用形態選択"),  # type: ignore
             dcc.Dropdown(
