@@ -4669,6 +4669,8 @@ def _generate_cost_analysis_content(by_key='role', wages=None) -> html.Div:
         # Fixed: React Error #31 - convert numpy types to Python native types
         if by_key == 'role':
             unique_values = long_df['role'].dropna().unique().tolist()
+            # Deploy 20.5: numpy/pandas型をPythonネイティブ型に変換
+            unique_values = [val.item() if hasattr(val, 'item') else val for val in unique_values]
         elif by_key == 'employment':
             unique_values = long_df['employment'].dropna().unique().tolist()
         else:  # staff
@@ -10668,6 +10670,8 @@ def register_interactive_callbacks(app_instance):
                     log.warning("[Cost] 'role' column not found")
                     return None
                 categories = long_df['role'].dropna().unique().tolist()
+                # Deploy 20.5: numpy/pandas型をPythonネイティブ型に変換（React Error #31対策）
+                categories = [val.item() if hasattr(val, 'item') else val for val in categories]
                 label = "職種別時給"
 
             elif by_key == 'employment':
@@ -10675,6 +10679,8 @@ def register_interactive_callbacks(app_instance):
                     log.warning("[Cost] 'employment' column not found")
                     return None
                 categories = long_df['employment'].dropna().unique().tolist()
+                # Deploy 20.5: numpy/pandas型をPythonネイティブ型に変換（React Error #31対策）
+                categories = [val.item() if hasattr(val, 'item') else val for val in categories]
                 label = "雇用形態別時給"
 
             elif by_key == 'staff':
@@ -10682,6 +10688,8 @@ def register_interactive_callbacks(app_instance):
                     log.warning("[Cost] 'staff' column not found")
                     return None
                 categories = long_df['staff'].dropna().unique().tolist()
+                # Deploy 20.5: numpy/pandas型をPythonネイティブ型に変換（React Error #31対策）
+                categories = [val.item() if hasattr(val, 'item') else val for val in categories]
                 label = "スタッフ別時給"
 
             else:
