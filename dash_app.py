@@ -1,4 +1,5 @@
 # dash_app.py - Shift-Suite高速分析ビューア (app.py機能完全再現版)
+# Deploy 20.7 - Force rebuild verification (all 18 type conversions confirmed)
 import base64
 import io
 import json
