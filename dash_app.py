@@ -297,10 +297,16 @@ class ScenarioData:
 
     def metadata(self) -> Dict[str, object]:
         """Return the metadata that tests expect."""
+        # Fixed: React Error #31 - ensure Python native types before returning to dcc.Store
+        # Even though Lines 1117, 1125 convert types, we need to ensure again here
+        # because this is the final checkpoint before data goes to React
+        safe_roles = [r.item() if hasattr(r, 'item') else r for r in self.roles]
+        safe_employments = [e.item() if hasattr(e, 'item') else e for e in self.employments]
+
         return {
             "name": self.name,
-            "available_roles": self.roles,
-            "available_employments": self.employments,
+            "available_roles": safe_roles,
+            "available_employments": safe_employments,
             "has_shortage_role_summary": not self.shortage_role_summary.empty,
             "has_shortage_employment_summary": not self.shortage_employment_summary.empty,
             "shortage_ratio_dates": [str(col) for col in self.shortage_ratio.columns],
@@ -1677,7 +1683,7 @@ def simple_synergy_analysis(long_df: pd.DataFrame, target_staff: str) -> pd.Data
     
     # 他の職員との共働分析
     synergy_scores = []
-    other_staff = long_df[long_df['staff'] != target_staff]['staff'].unique()
+    other_staff = long_df[long_df['staff'] != target_staff]['staff'].unique().tolist()
     
     for coworker in other_staff:
         coworker_work = long_df[long_df['staff'] == coworker]
@@ -2274,14 +2280,14 @@ def calculate_role_dynamic_need(df_heat: pd.DataFrame, date_cols: List[str], hea
             # 時間帯インデックスを合わせる
             if len(overall_need_series) == len(df_heat):
                 role_need_series = overall_need_series * role_ratio
-                need_df[date_col] = role_need_series.values
+                need_df[date_col] = role_need_series.tolist()
             else:
                 # インデックス不一致の場合は平均値を使用
                 avg_need = overall_need_series.mean() * role_ratio
                 need_df[date_col] = avg_need
         else:
             # 該当日付がない場合は基準値を使用
-            need_df[date_col] = df_heat['need'].values
+            need_df[date_col] = df_heat['need'].tolist()
     
     need_df = need_df.fillna(0)
     total_calculated_need = need_df.sum().sum()
@@ -2884,7 +2890,7 @@ def calc_ratio_from_heatmap_integrated(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def load_shortage_meta(data_dir: Path) -> Tuple[List[str], List[str]]:
-    """職種と雇用形態のリストを読み込む"""
+    """職種と雇用形態のリストを読み込む（numpy/pandas型を自動変換）"""
     roles = []
     employments = []
     meta_fp = data_dir / "shortage.meta.json"
@@ -2894,6 +2900,11 @@ def load_shortage_meta(data_dir: Path) -> Tuple[List[str], List[str]]:
                 meta = json.load(f)
             roles = meta.get("roles", [])
             employments = meta.get("employments", [])
+
+            # Fixed: React Error #31 - convert numpy/pandas types to Python native types
+            roles = [r.item() if hasattr(r, 'item') else r for r in roles]
+            employments = [e.item() if hasattr(e, 'item') else e for e in employments]
+
         except Exception as e:
             log.debug(f"Failed to load shortage meta: {e}")
     return roles, employments
@@ -2959,7 +2970,7 @@ def generate_heatmap_figure(df_heat: pd.DataFrame, title: str, device_type: str 
         log.debug(f"[Heatmap] {title}: {zero_rows}個の時間スロットが全日程で0人 (休日時間帯の可能性)")
     
     # データ品質チェック
-    total_values = display_df.values.sum()
+    total_values = float(display_df.values.sum())
     if total_values == 0:
         log.warning(f"[Heatmap] {title}: 全データが0です")
     
@@ -3430,16 +3441,34 @@ def create_overview_tab(selected_scenario: str = None) -> html.Div:
                 scenario_total = total_rows[total_rows['scenario'] == selected_scenario]
                 if not scenario_total.empty:
                     excess_cost = scenario_total['estimated_excess_cost'].iloc[0] if 'estimated_excess_cost' in scenario_total.columns else 0
+                    if hasattr(excess_cost, 'item'):
+                        excess_cost = excess_cost.item()
                     lack_temp_cost = scenario_total['estimated_lack_cost_if_temporary_staff'].iloc[0] if 'estimated_lack_cost_if_temporary_staff' in scenario_total.columns else 0
+                    if hasattr(lack_temp_cost, 'item'):
+                        lack_temp_cost = lack_temp_cost.item()
                     lack_penalty_cost = scenario_total['estimated_lack_penalty_cost'].iloc[0] if 'estimated_lack_penalty_cost' in scenario_total.columns else 0
+                    if hasattr(lack_penalty_cost, 'item'):
+                        lack_penalty_cost = lack_penalty_cost.item()
                 else:
                     excess_cost = total_rows['estimated_excess_cost'].iloc[0] if 'estimated_excess_cost' in total_rows.columns else 0
+                    if hasattr(excess_cost, 'item'):
+                        excess_cost = excess_cost.item()
                     lack_temp_cost = total_rows['estimated_lack_cost_if_temporary_staff'].iloc[0] if 'estimated_lack_cost_if_temporary_staff' in total_rows.columns else 0
+                    if hasattr(lack_temp_cost, 'item'):
+                        lack_temp_cost = lack_temp_cost.item()
                     lack_penalty_cost = total_rows['estimated_lack_penalty_cost'].iloc[0] if 'estimated_lack_penalty_cost' in total_rows.columns else 0
+                    if hasattr(lack_penalty_cost, 'item'):
+                        lack_penalty_cost = lack_penalty_cost.item()
             else:
                 excess_cost = total_rows['estimated_excess_cost'].iloc[0] if 'estimated_excess_cost' in total_rows.columns else 0
+                if hasattr(excess_cost, 'item'):
+                    excess_cost = excess_cost.item()
                 lack_temp_cost = total_rows['estimated_lack_cost_if_temporary_staff'].iloc[0] if 'estimated_lack_cost_if_temporary_staff' in total_rows.columns else 0
+                if hasattr(lack_temp_cost, 'item'):
+                    lack_temp_cost = lack_temp_cost.item()
                 lack_penalty_cost = total_rows['estimated_lack_penalty_cost'].iloc[0] if 'estimated_lack_penalty_cost' in total_rows.columns else 0
+                if hasattr(lack_penalty_cost, 'item'):
+                    lack_penalty_cost = lack_penalty_cost.item()
         else:
             # 職種別データから計算（シナリオ別）
             if selected_scenario and 'scenario' in df_shortage_role.columns:
@@ -3692,9 +3721,9 @@ def _generate_static_heatmap(selected_role: str, selected_emp: str) -> dcc.Graph
             if 'dates' in meta_data and meta_data['dates']:
                 all_dates = sorted(meta_data['dates'])
             else:
-                all_dates = sorted(aggregated_df['date_lbl'].unique())
+                all_dates = sorted(aggregated_df['date_lbl'].unique().tolist())
         except:
-            all_dates = sorted(aggregated_df['date_lbl'].unique())
+            all_dates = sorted(aggregated_df['date_lbl'].unique().tolist())
 
         empty_heatmap = pd.DataFrame(index=time_labels, columns=all_dates).fillna(0)
         fig_empty = generate_heatmap_figure(empty_heatmap, f"{title} (勤務データなし)", device_type="desktop")
@@ -3716,7 +3745,7 @@ def _generate_static_heatmap(selected_role: str, selected_emp: str) -> dcc.Graph
 
     # 6. 全日付でreindex
     try:
-        all_original_dates = sorted(aggregated_df['date_lbl'].unique())
+        all_original_dates = sorted(aggregated_df['date_lbl'].unique().tolist())
         meta_data = data_get('heatmap_meta', {})
         if 'dates' in meta_data and meta_data['dates']:
             all_dates_to_use = sorted(meta_data['dates'])
@@ -3726,7 +3755,7 @@ def _generate_static_heatmap(selected_role: str, selected_emp: str) -> dcc.Graph
             log.info(f"[Heatmap Static] aggregated_dfから日付範囲取得: {len(all_original_dates)}日")
     except Exception as e:
         log.warning(f"[Heatmap Static] 日付範囲取得エラー: {e}")
-        all_dates_to_use = sorted(aggregated_df['date_lbl'].unique())
+        all_dates_to_use = sorted(aggregated_df['date_lbl'].unique().tolist())
 
     if all_dates_to_use:
         dynamic_heatmap_df = dynamic_heatmap_df.reindex(columns=all_dates_to_use, fill_value=0)
@@ -4533,7 +4562,7 @@ def create_leave_analysis_tab() -> html.Div:
                 # 日別休暇取得者数の集計
                 leave_summary = leave_data.groupby(leave_data['ds'].dt.date).agg({
                     'staff': 'nunique',
-                    'role': lambda x: ', '.join(x.unique()[:5])  # 最大5職種まで表示
+                    'role': lambda x: ', '.join(x.unique().tolist()[:5])  # 最大5職種まで表示
                 }).reset_index()
                 leave_summary.columns = ['date', 'leave_count', 'affected_roles']
                 
@@ -4718,11 +4747,15 @@ def _generate_cost_analysis_content(by_key='role', wages=None) -> html.Div:
     # サマリーカード
     total_cost = df_cost['cost'].sum()
     avg_daily_cost = df_cost['cost'].mean()
-    max_cost_day = df_cost.loc[df_cost['cost'].idxmax()]
+    max_cost_day_series = df_cost.loc[df_cost['cost'].idxmax()]
+    max_cost_day_date = max_cost_day_series['date']
+    max_cost_day_cost = max_cost_day_series['cost']
+    if hasattr(max_cost_day_cost, 'item'):
+        max_cost_day_cost = max_cost_day_cost.item()
     summary_cards = html.Div([
         create_metric_card("総コスト", f"¥{total_cost:,.0f}"),
         create_metric_card("日平均コスト", f"¥{avg_daily_cost:,.0f}"),
-        create_metric_card("最高コスト日", f"{max_cost_day['date'].strftime('%m/%d')}<br>¥{max_cost_day['cost']:,.0f}"),
+        create_metric_card("最高コスト日", f"{max_cost_day_date.strftime('%m/%d')}<br>¥{max_cost_day_cost:,.0f}"),
     ], style={'display': 'flex', 'justifyContent': 'space-around', 'marginBottom': '20px'})
     content.append(summary_cards)
 
@@ -5488,8 +5521,8 @@ def _create_work_distribution_chart(selected_staff: str, staff_df: pd.DataFrame)
         if not work_records.empty:
             code_counts = work_records['code'].value_counts()
             fig = px.pie(
-                values=code_counts.values,
-                names=code_counts.index,
+                values=code_counts.tolist(),
+                names=code_counts.index.tolist(),
                 title=f'{selected_staff}さんの勤務割合',
                 hole=.3
             )
@@ -5521,7 +5554,10 @@ def _calculate_scores(
     if not fatigue_df.empty:
         fatigue_df_indexed = fatigue_df.set_index('staff') if 'staff' in fatigue_df.columns else fatigue_df
         if selected_staff in fatigue_df_indexed.index:
-            fatigue_score = f"{fatigue_df_indexed.loc[selected_staff, 'fatigue_score']:.1f}"
+            fatigue_value = fatigue_df_indexed.loc[selected_staff, 'fatigue_score']
+            if hasattr(fatigue_value, 'item'):
+                fatigue_value = fatigue_value.item()
+            fatigue_score = f"{fatigue_value:.1f}"
 
     # 不公平感スコア
     if not fairness_df.empty and 'staff' in fairness_df.columns:
@@ -5706,7 +5742,7 @@ def _calculate_work_patterns(selected_staff: str, staff_df: pd.DataFrame) -> tup
             if 'ds' in work_records.columns:
                 work_records_sorted = work_records.sort_values('ds')
                 work_records_sorted['date_only'] = work_records_sorted['ds'].dt.date
-                unique_dates = work_records_sorted['date_only'].unique()
+                unique_dates = work_records_sorted['date_only'].unique().tolist()
 
                 if len(unique_dates) > 1:
                     consecutive_runs = []
@@ -6775,7 +6811,7 @@ def update_individual_analysis_content(selected_staff, synergy_type):
         if not work_records.empty:
             code_counts = work_records['code'].value_counts()
             work_dist_fig = px.pie(
-                values=code_counts.values, names=code_counts.index,
+                values=code_counts.tolist(), names=code_counts.index.tolist(),
                 title=f'{selected_staff}さんの勤務割合', hole=.3
             )
             work_dist_fig.update_traces(textposition='inside', textinfo='percent+label')
@@ -6786,7 +6822,10 @@ def update_individual_analysis_content(selected_staff, synergy_type):
     if not fatigue_df.empty:
         fatigue_df_indexed = fatigue_df.set_index('staff') if 'staff' in fatigue_df.columns else fatigue_df
         if selected_staff in fatigue_df_indexed.index:
-            fatigue_score = f"{fatigue_df_indexed.loc[selected_staff, 'fatigue_score']:.1f}"
+            fatigue_value = fatigue_df_indexed.loc[selected_staff, 'fatigue_score']
+            if hasattr(fatigue_value, 'item'):
+                fatigue_value = fatigue_value.item()
+            fatigue_score = f"{fatigue_value:.1f}"
     if not fairness_df.empty and 'staff' in fairness_df.columns:
         staff_fairness = fairness_df[fairness_df['staff'] == selected_staff]
         if not staff_fairness.empty:
@@ -6916,7 +6955,7 @@ def update_individual_analysis_content(selected_staff, synergy_type):
                             log.info(f"[SYNERGY] キャッシュから相関マトリックス取得: {cache_key}")
                         else:
                             log.info("[SYNERGY] 相関マトリックス新規計算開始")
-                            n_staff = len(long_df['staff'].unique())
+                            n_staff = len(long_df['staff'].unique().tolist())
                             total_calculations = n_staff * (n_staff - 1) // 2
                             log.info(f"[SYNERGY] 計算予定ペア数: {total_calculations}")
 
@@ -6995,13 +7034,14 @@ def update_individual_analysis_content(selected_staff, synergy_type):
             matrix_df = pd.DataFrame(synergy_matrix_data['matrix'])
 
             # ヒートマップ作成
+            matrix_values = matrix_df.values.tolist()
             synergy_fig = go.Figure(data=go.Heatmap(
-                z=matrix_df.values,
-                x=matrix_df.columns,
-                y=matrix_df.index,
+                z=matrix_values,
+                x=matrix_df.columns.tolist(),
+                y=matrix_df.index.tolist(),
                 colorscale='RdBu',
                 zmid=0,
-                text=np.round(matrix_df.values, 2),
+                text=[[round(v, 2) for v in row] for row in matrix_values],
                 texttemplate='%{text}',
                 textfont={"size": 10},
                 hoverongaps=False,
@@ -8490,9 +8530,11 @@ def register_shortage_callbacks(app_instance):
                             ratio = np.divide(filtered_staff_pivot.values, total_staff_pivot.values,
                                             out=np.zeros_like(filtered_staff_pivot.values, dtype=np.float64),
                                             where=(total_staff_pivot.values != 0))
-                    
+                            # numpy配列を保持（計算に使用）
+
                         # 比例配分を適用（次元の安全な調整）
                         need_values = need_per_date_slot_df[common_dates].values
+                        # numpy配列を保持（計算に使用）
                     
                         # 次元の安全な調整
                         min_rows = min(need_values.shape[0], ratio.shape[0])
@@ -9469,7 +9511,7 @@ def _unused_update_hire_simulation(selected_pattern, added_fte, kpi_data):
                         else:
                             # フォールバック: shortage_timeから計算（按分係数適用）
                             shortage_values = shortage_time_df.select_dtypes(include=[np.number]).values
-                            raw_shortage_hours = float(np.nansum(shortage_values)) * SLOT_HOURS
+                            raw_shortage_hours = float(np.nansum(shortage_values) * SLOT_HOURS)
                             new_total_lack_h = raw_shortage_hours  # 正しい不足時間を使用
                             log.info(f"シミュレーション: shortage_timeから正常計算: {new_total_lack_h:.2f}h")
                     else:
