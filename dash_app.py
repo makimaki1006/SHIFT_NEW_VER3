@@ -8786,12 +8786,10 @@ def update_optimization_content(*args):
 #     Output('overview-insights', 'children'),
 #     Input('kpi-data-store', 'data'),
 # )
-# ===== COMMENTED OUT: update_overview_insights (Phase 3.1: Legacy callback disabled after Phase 2+) =====
-# @safe_callback
-# def update_overview_insights(kpi_data):
-#     if not kpi_data:
-#         return ""
-# 
+@safe_callback
+def update_overview_insights(kpi_data):
+    if not kpi_data:
+        return ""
 #     total_lack_h = kpi_data.get('total_lack_h', 0)
 # 
 #     if total_lack_h > 0:
@@ -8813,14 +8811,12 @@ def update_optimization_content(*args):
 #     Output('shortage-insights', 'children'),
 #     Input('kpi-data-store', 'data'),
 # )
-# ===== COMMENTED OUT: update_shortage_insights (Phase 3.1: Legacy callback disabled after Phase 2+) =====
-# @safe_callback
-# def update_shortage_insights(kpi_data):
-#     explanation = """
+@safe_callback
+def update_shortage_insights(kpi_data):
+    explanation = """
     #### 不足分析の評価方法
-#     - **不足 (Shortage):** `不足人数 = 必要人数 (Need) - 実績人数` で計算されます。値がプラスの場合、その時間帯は人員が不足していたことを示します。
-#     - **過剰 (Excess):** `過剰人数 = 実績人数 - 上限人数 (Upper)` で計算されます。値がプラスの場合、過剰な人員が配置されていたことを示します。
-# 
+    - **不足 (Shortage):** `不足人数 = 必要人数 (Need) - 実績人数` で計算されます。値がプラスの場合、その時間帯は人員が不足していたことを示します。
+    - **過剰 (Excess):** `過剰人数 = 実績人数 - 上限人数 (Upper)` で計算されます。値がプラスの場合、過剰な人員が配置されていたことを示します。
 #     *「必要人数」と「上限人数」は、サイドバーの「分析基準設定」で指定した方法（過去実績の統計、または人員配置基準）に基づいて算出されます。*
 #     """
 #     return dcc.Markdown(explanation)
@@ -8830,33 +8826,29 @@ def update_optimization_content(*args):
 #     Output('hire-plan-insights', 'children'),
 #     Input('kpi-data-store', 'data'),
 # )
-# ===== COMMENTED OUT: update_hire_plan_insights (Phase 3.1: Legacy callback disabled after Phase 2+) =====
-# @safe_callback
-# def update_hire_plan_insights(kpi_data):
-#     if not kpi_data:
-#         return ""
-#     total_lack_h = kpi_data.get('total_lack_h', 0)
-#     if total_lack_h == 0:
-#         return html.P("追加採用の必要はありません。")
-#     role = kpi_data.get('most_lacking_role_name', 'N/A')
-#     return dcc.Markdown(
-#         f"最も不足している **{role}** の補充を優先的に検討してください。"
-#     )
-# 
+@safe_callback
+def update_hire_plan_insights(kpi_data):
+    if not kpi_data:
+        return ""
+    total_lack_h = kpi_data.get('total_lack_h', 0)
+    if total_lack_h == 0:
+        return html.P("追加採用の必要はありません。")
+    role = kpi_data.get('most_lacking_role_name', 'N/A')
+    return dcc.Markdown(
+        f"最も不足している **{role}** の補充を優先的に検討してください。"
+    )
 # 
 # @app.callback(
 #     Output('optimization-insights', 'children'),
 #     Input('kpi-data-store', 'data'),
 # )
-# ===== COMMENTED OUT: update_optimization_insights (Phase 3.1: Legacy callback disabled after Phase 2+) =====
-# @safe_callback
-# def update_optimization_insights(kpi_data):
-#     explanation = """
+@safe_callback
+def update_optimization_insights(kpi_data):
+    explanation = """
     #### 最適化分析の評価方法
-#     人員配置の効率性は、以下の2つの観点からペナルティを計算し、最終的なスコアを算出します。
-#     - **不足ペナルティ (重み: 60%):** `(必要人数 - 実績人数) / 必要人数`
-#     - **過剰ペナルティ (重み: 40%):** `(実績人数 - 上限人数) / 上限人数`
-# 
+    人員配置の効率性は、以下の2つの観点からペナルティを計算し、最終的なスコアを算出します。
+    - **不足ペナルティ (重み: 60%):** `(必要人数 - 実績人数) / 必要人数`
+    - **過剰ペナルティ (重み: 40%):** `(実績人数 - 上限人数) / 上限人数`
 #     **最適化スコア = 1 - (不足ペナルティ × 0.6 + 過剰ペナルティ × 0.4)**
 # 
 #     *スコアが1に近いほど、不足も過剰もなく、効率的な人員配置ができている状態を示します。*
@@ -8868,30 +8860,26 @@ def update_optimization_content(*args):
 #     Output('leave-insights', 'children'),
 #     Input('kpi-data-store', 'data'),
 # )
-# ===== COMMENTED OUT: update_leave_insights (Phase 3.1: Legacy callback disabled after Phase 2+) =====
-# @safe_callback
-# def update_leave_insights(kpi_data):
-#     explanation = """
+@safe_callback
+def update_leave_insights(kpi_data):
+    explanation = """
     #### 休暇分析の評価方法
-#     - **休暇取得者数:** `holiday_type`が休暇関連（希望休、有給など）に設定され、かつ勤務時間がない（`parsed_slots_count = 0`）場合に「1日」としてカウントされます。
-#     - **集中日:** 「希望休」の取得者数が、サイドバーで設定した閾値（デフォルト: 3人）以上になった日を「集中日」としてハイライトします。
-#     """
-#     return dcc.Markdown(explanation)
-# 
+    - **休暇取得者数:** `holiday_type`が休暇関連（希望休、有給など）に設定され、かつ勤務時間がない（`parsed_slots_count = 0`）場合に「1日」としてカウントされます。
+    - **集中日:** 「希望休」の取得者数が、サイドバーで設定した閾値（デフォルト: 3人）以上になった日を「集中日」としてハイライトします。
+    """
+    return dcc.Markdown(explanation)
 # 
 # @app.callback(
 #     Output('cost-insights', 'children'),
 #     Input('kpi-data-store', 'data'),
 # )
-# ===== COMMENTED OUT: update_cost_insights (Phase 3.1: Legacy callback disabled after Phase 2+) =====
-# @safe_callback
-# def update_cost_insights(kpi_data):
-#     explanation = """
+@safe_callback
+def update_cost_insights(kpi_data):
+    explanation = """
     #### コスト分析の評価方法
-#     日々の人件費は、各スタッフの勤務時間（スロット数 × スロット長）に、サイドバーで設定した単価基準（職種別、雇用形態別など）の時給を乗じて算出されます。
-#     """
-#     return dcc.Markdown(explanation)
-# 
+    日々の人件費は、各スタッフの勤務時間（スロット数 × スロット長）に、サイドバーで設定した単価基準（職種別、雇用形態別など）の時給を乗じて算出されます。
+    """
+    return dcc.Markdown(explanation)
 # 
 @app.callback(
     Output('wage-input-container', 'children'),
@@ -8970,12 +8958,10 @@ def update_wage_inputs(by_key):
     Input('individual-staff-dropdown', 'value'),
     prevent_initial_call=True
 )
-# ===== COMMENTED OUT: update_individual_analysis_content (Phase 3.1: Legacy callback disabled after Phase 2+) =====
-# @safe_callback
-# def update_individual_analysis_content(selected_staff):
-#     """
-#     職員選択に応じて基本分析を更新（Pattern A - Phase 1）
-#     
+@safe_callback
+def update_individual_analysis_content(selected_staff):
+    """
+    職員選択に応じて基本分析を更新（Pattern A - Phase 1）
 #     Phase 1実装:
 #     - シナジー分析は除外（ヘルパー関数に移譲）
 #     - グローバル変数は使用しない
@@ -9010,12 +8996,10 @@ def update_wage_inputs(by_key):
     State('team-criteria-key-dropdown', 'value'),
     prevent_initial_call=True
 )
-# ===== COMMENTED OUT: update_team_analysis_graphs (Phase 3.1: Legacy callback disabled after Phase 2+) =====
-# @safe_callback
-# def update_team_analysis_graphs(selected_value, selected_key):
-#     """
-#     チーム条件変更時にコンテンツを更新（Pattern A対応）
-# 
+@safe_callback
+def update_team_analysis_graphs(selected_value, selected_key):
+    """
+    チーム条件変更時にコンテンツを更新（Pattern A対応）
 #     Pattern A実装:
 #     - ロジックは全てヘルパー関数に委譲
 #     - グローバル変数不使用、セッション分離維持
