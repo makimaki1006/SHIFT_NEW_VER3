@@ -7813,48 +7813,42 @@ def update_tab_visibility(active_tab, selected_scenario, data_status):
      Input('scenario-dropdown', 'value')],
     State('data-loaded', 'data'),
 )
-# ===== COMMENTED OUT: initialize_overview_content (Phase 3.1: Legacy callback disabled after Phase 2+) =====
-# @safe_callback
-# def initialize_overview_content(style, selected_scenario, data_status):
-#     """概要タブの内容を初期化"""
-#     if not selected_scenario or not data_status or style.get('display') == 'none':
-#         raise PreventUpdate
-#     try:
-#         return create_overview_tab(selected_scenario)
-#     except Exception as e:
-#         log.error(f"概要タブの初期化エラー: {str(e)}")
-#         return html.Div(f"エラーが発生しました: {str(e)}", style={'color': 'red'})
-# 
+@safe_callback
+def initialize_overview_content(style, selected_scenario, data_status):
+    """概要タブの内容を初期化"""
+    if not selected_scenario or not data_status or style.get('display') == 'none':
+        raise PreventUpdate
+    try:
+        return create_overview_tab(selected_scenario)
+    except Exception as e:
+        log.error(f"概要タブの初期化エラー: {str(e)}")
+        return html.Div(f"エラーが発生しました: {str(e)}", style={'color': 'red'})
 @app.callback(
     Output('heatmap-content', 'children'),
     Input('heatmap-tab-container', 'style'),
     State('scenario-dropdown', 'value'),
     State('data-loaded', 'data'),
 )
-# ===== COMMENTED OUT: initialize_heatmap_content (Phase 3.1: Legacy callback disabled after Phase 2+) =====
-# @safe_callback
-# def initialize_heatmap_content(style, selected_scenario, data_status):
-#     """ヒートマップタブの内容を初期化"""
-#     if not selected_scenario or not data_status or style.get('display') == 'none':
-#         raise PreventUpdate
-#     try:
-#         return create_heatmap_tab()
-#     except Exception as e:
-#         log.error(f"ヒートマップタブの初期化エラー: {str(e)}")
-#         return html.Div(f"エラーが発生しました: {str(e)}", style={'color': 'red'})
-# 
+@safe_callback
+def initialize_heatmap_content(style, selected_scenario, data_status):
+    """ヒートマップタブの内容を初期化"""
+    if not selected_scenario or not data_status or style.get('display') == 'none':
+        raise PreventUpdate
+    try:
+        return create_heatmap_tab()
+    except Exception as e:
+        log.error(f"ヒートマップタブの初期化エラー: {str(e)}")
+        return html.Div(f"エラーが発生しました: {str(e)}", style={'color': 'red'})
 @app.callback(
     Output('shortage-content', 'children'),
     [Input('shortage-tab-container', 'style'),
      Input('scenario-dropdown', 'value')],
     State('data-loaded', 'data'),
 )
-# ===== COMMENTED OUT: initialize_shortage_content (Phase 3.1: Legacy callback disabled after Phase 2+) =====
-# @safe_callback
-# def initialize_shortage_content(style, selected_scenario, data_status):
-#     """不足分析タブの内容を初期化"""
-#     log.info(f"[shortage_tab] 初期化開始 - scenario: {selected_scenario}, data_status: {data_status}, style: {style}")
-#     
+@safe_callback
+def initialize_shortage_content(style, selected_scenario, data_status):
+    """不足分析タブの内容を初期化"""
+    log.info(f"[shortage_tab] 初期化開始 - scenario: {selected_scenario}, data_status: {data_status}, style: {style}")
 #     if not selected_scenario or not data_status or style.get('display') == 'none':
 #         log.info("[shortage_tab] PreventUpdate - 条件不満足")
 #         raise PreventUpdate
@@ -7875,30 +7869,26 @@ def update_tab_visibility(active_tab, selected_scenario, data_status):
     State('scenario-dropdown', 'value'),
     State('data-loaded', 'data'),
 )
-# ===== COMMENTED OUT: initialize_optimization_content (Phase 3.1: Legacy callback disabled after Phase 2+) =====
-# @safe_callback
-# def initialize_optimization_content(style, selected_scenario, data_status):
-#     """最適化分析タブの内容を初期化"""
-#     if not selected_scenario or not data_status or style.get('display') == 'none':
-#         raise PreventUpdate
-#     try:
-#         return create_optimization_tab()
-#     except Exception as e:
-#         log.error(f"最適化分析タブの初期化エラー: {str(e)}")
-#         return html.Div(f"エラーが発生しました: {str(e)}", style={'color': 'red'})
-# 
+@safe_callback
+def initialize_optimization_content(style, selected_scenario, data_status):
+    """最適化分析タブの内容を初期化"""
+    if not selected_scenario or not data_status or style.get('display') == 'none':
+        raise PreventUpdate
+    try:
+        return create_optimization_tab()
+    except Exception as e:
+        log.error(f"最適化分析タブの初期化エラー: {str(e)}")
+        return html.Div(f"エラーが発生しました: {str(e)}", style={'color': 'red'})
 @app.callback(
     Output('leave-content', 'children'),
     Input('leave-tab-container', 'style'),
     State('scenario-dropdown', 'value'),
     State('data-loaded', 'data'),
 )
-# ===== COMMENTED OUT: initialize_leave_content (Phase 3.1: Legacy callback disabled after Phase 2+) =====
-# @safe_callback
-# def initialize_leave_content(style, selected_scenario, data_status):
-#     """休暇分析タブの内容を初期化"""
-#     log.info(f"[leave_tab] 初期化開始 - scenario: {selected_scenario}, data_status: {data_status}, style: {style}")
-#     
+@safe_callback
+def initialize_leave_content(style, selected_scenario, data_status):
+    """休暇分析タブの内容を初期化"""
+    log.info(f"[leave_tab] 初期化開始 - scenario: {selected_scenario}, data_status: {data_status}, style: {style}")
 #     if not selected_scenario or not data_status or style.get('display') == 'none':
 #         log.info("[leave_tab] PreventUpdate - 条件不満足")
 #         raise PreventUpdate
@@ -7919,162 +7909,144 @@ def update_tab_visibility(active_tab, selected_scenario, data_status):
     State('scenario-dropdown', 'value'),
     State('data-loaded', 'data'),
 )
-# ===== COMMENTED OUT: initialize_cost_content (Phase 3.1: Legacy callback disabled after Phase 2+) =====
-# @safe_callback
-# def initialize_cost_content(style, selected_scenario, data_status):
-#     """コスト分析タブの内容を初期化"""
-#     if not selected_scenario or not data_status or style.get('display') == 'none':
-#         raise PreventUpdate
-#     try:
-#         return create_cost_analysis_tab()
-#     except Exception as e:
-#         log.error(f"コスト分析タブの初期化エラー: {str(e)}")
-#         return html.Div(f"エラーが発生しました: {str(e)}", style={'color': 'red'})
-# 
+@safe_callback
+def initialize_cost_content(style, selected_scenario, data_status):
+    """コスト分析タブの内容を初期化"""
+    if not selected_scenario or not data_status or style.get('display') == 'none':
+        raise PreventUpdate
+    try:
+        return create_cost_analysis_tab()
+    except Exception as e:
+        log.error(f"コスト分析タブの初期化エラー: {str(e)}")
+        return html.Div(f"エラーが発生しました: {str(e)}", style={'color': 'red'})
 @app.callback(
     Output('hire-plan-content', 'children'),
     Input('hire-plan-tab-container', 'style'),
     State('scenario-dropdown', 'value'),
     State('data-loaded', 'data'),
 )
-# ===== COMMENTED OUT: initialize_hire_plan_content (Phase 3.1: Legacy callback disabled after Phase 2+) =====
-# @safe_callback
-# def initialize_hire_plan_content(style, selected_scenario, data_status):
-#     """採用計画タブの内容を初期化"""
-#     if not selected_scenario or not data_status or style.get('display') == 'none':
-#         raise PreventUpdate
-#     try:
-#         return create_hire_plan_tab()
-#     except Exception as e:
-#         log.error(f"採用計画タブの初期化エラー: {str(e)}")
-#         return html.Div(f"エラーが発生しました: {str(e)}", style={'color': 'red'})
-# 
+@safe_callback
+def initialize_hire_plan_content(style, selected_scenario, data_status):
+    """採用計画タブの内容を初期化"""
+    if not selected_scenario or not data_status or style.get('display') == 'none':
+        raise PreventUpdate
+    try:
+        return create_hire_plan_tab()
+    except Exception as e:
+        log.error(f"採用計画タブの初期化エラー: {str(e)}")
+        return html.Div(f"エラーが発生しました: {str(e)}", style={'color': 'red'})
 @app.callback(
     Output('fatigue-content', 'children'),
     Input('fatigue-tab-container', 'style'),
     State('scenario-dropdown', 'value'),
     State('data-loaded', 'data'),
 )
-# ===== COMMENTED OUT: initialize_fatigue_content (Phase 3.1: Legacy callback disabled after Phase 2+) =====
-# @safe_callback
-# def initialize_fatigue_content(style, selected_scenario, data_status):
-#     """疲労分析タブの内容を初期化"""
-#     if not selected_scenario or not data_status or style.get('display') == 'none':
-#         raise PreventUpdate
-#     try:
-#         return create_fatigue_tab()
-#     except Exception as e:
-#         log.error(f"疲労分析タブの初期化エラー: {str(e)}")
-#         return html.Div(f"エラーが発生しました: {str(e)}", style={'color': 'red'})
-# 
+@safe_callback
+def initialize_fatigue_content(style, selected_scenario, data_status):
+    """疲労分析タブの内容を初期化"""
+    if not selected_scenario or not data_status or style.get('display') == 'none':
+        raise PreventUpdate
+    try:
+        return create_fatigue_tab()
+    except Exception as e:
+        log.error(f"疲労分析タブの初期化エラー: {str(e)}")
+        return html.Div(f"エラーが発生しました: {str(e)}", style={'color': 'red'})
 @app.callback(
     Output('forecast-content', 'children'),
     Input('forecast-tab-container', 'style'),
     State('scenario-dropdown', 'value'),
     State('data-loaded', 'data'),
 )
-# ===== COMMENTED OUT: initialize_forecast_content (Phase 3.1: Legacy callback disabled after Phase 2+) =====
-# @safe_callback
-# def initialize_forecast_content(style, selected_scenario, data_status):
-#     """需要予測タブの内容を初期化"""
-#     if not selected_scenario or not data_status or style.get('display') == 'none':
-#         raise PreventUpdate
-#     try:
-#         return create_forecast_tab()
-#     except Exception as e:
-#         log.error(f"需要予測タブの初期化エラー: {str(e)}")
-#         return html.Div(f"エラーが発生しました: {str(e)}", style={'color': 'red'})
-# 
+@safe_callback
+def initialize_forecast_content(style, selected_scenario, data_status):
+    """需要予測タブの内容を初期化"""
+    if not selected_scenario or not data_status or style.get('display') == 'none':
+        raise PreventUpdate
+    try:
+        return create_forecast_tab()
+    except Exception as e:
+        log.error(f"需要予測タブの初期化エラー: {str(e)}")
+        return html.Div(f"エラーが発生しました: {str(e)}", style={'color': 'red'})
 @app.callback(
     Output('fairness-content', 'children'),
     Input('fairness-tab-container', 'style'),
     State('scenario-dropdown', 'value'),
     State('data-loaded', 'data'),
 )
-# ===== COMMENTED OUT: initialize_fairness_content (Phase 3.1: Legacy callback disabled after Phase 2+) =====
-# @safe_callback
-# def initialize_fairness_content(style, selected_scenario, data_status):
-#     """公平性タブの内容を初期化"""
-#     if not selected_scenario or not data_status or style.get('display') == 'none':
-#         raise PreventUpdate
-#     try:
-#         return create_fairness_tab()
-#     except Exception as e:
-#         log.error(f"公平性タブの初期化エラー: {str(e)}")
-#         return html.Div(f"エラーが発生しました: {str(e)}", style={'color': 'red'})
-# 
+@safe_callback
+def initialize_fairness_content(style, selected_scenario, data_status):
+    """公平性タブの内容を初期化"""
+    if not selected_scenario or not data_status or style.get('display') == 'none':
+        raise PreventUpdate
+    try:
+        return create_fairness_tab()
+    except Exception as e:
+        log.error(f"公平性タブの初期化エラー: {str(e)}")
+        return html.Div(f"エラーが発生しました: {str(e)}", style={'color': 'red'})
 @app.callback(
     Output('gap-content', 'children'),
     Input('gap-tab-container', 'style'),
     State('scenario-dropdown', 'value'),
     State('data-loaded', 'data'),
 )
-# ===== COMMENTED OUT: initialize_gap_content (Phase 3.1: Legacy callback disabled after Phase 2+) =====
-# @safe_callback
-# def initialize_gap_content(style, selected_scenario, data_status):
-#     """基準乖離分析タブの内容を初期化"""
-#     if not selected_scenario or not data_status or style.get('display') == 'none':
-#         raise PreventUpdate
-#     try:
-#         return create_gap_analysis_tab()
-#     except Exception as e:
-#         log.error(f"基準乖離分析タブの初期化エラー: {str(e)}")
-#         return html.Div(f"エラーが発生しました: {str(e)}", style={'color': 'red'})
-# 
+@safe_callback
+def initialize_gap_content(style, selected_scenario, data_status):
+    """基準乖離分析タブの内容を初期化"""
+    if not selected_scenario or not data_status or style.get('display') == 'none':
+        raise PreventUpdate
+    try:
+        return create_gap_analysis_tab()
+    except Exception as e:
+        log.error(f"基準乖離分析タブの初期化エラー: {str(e)}")
+        return html.Div(f"エラーが発生しました: {str(e)}", style={'color': 'red'})
 @app.callback(
     Output('team-analysis-content', 'children'),
     Input('team-analysis-tab-container', 'style'),
     State('scenario-dropdown', 'value'),
     State('data-loaded', 'data'),
 )
-# ===== COMMENTED OUT: initialize_team_analysis_content (Phase 3.1: Legacy callback disabled after Phase 2+) =====
-# @safe_callback
-# def initialize_team_analysis_content(style, selected_scenario, data_status):
-#     """チーム分析タブの内容を初期化"""
-#     if not selected_scenario or not data_status or style.get('display') == 'none':
-#         raise PreventUpdate
-#     try:
-#         return create_team_analysis_tab()
-#     except Exception as e:
-#         log.error(f"チーム分析タブの初期化エラー: {str(e)}")
-#         return html.Div(f"エラーが発生しました: {str(e)}", style={'color': 'red'})
-# 
+@safe_callback
+def initialize_team_analysis_content(style, selected_scenario, data_status):
+    """チーム分析タブの内容を初期化"""
+    if not selected_scenario or not data_status or style.get('display') == 'none':
+        raise PreventUpdate
+    try:
+        return create_team_analysis_tab()
+    except Exception as e:
+        log.error(f"チーム分析タブの初期化エラー: {str(e)}")
+        return html.Div(f"エラーが発生しました: {str(e)}", style={'color': 'red'})
 @app.callback(
     Output('blueprint-analysis-content', 'children'),
     Input('blueprint-analysis-tab-container', 'style'),
     State('scenario-dropdown', 'value'),
     State('data-loaded', 'data'),
 )
-# ===== COMMENTED OUT: initialize_blueprint_analysis_content (Phase 3.1: Legacy callback disabled after Phase 2+) =====
-# @safe_callback
-# def initialize_blueprint_analysis_content(style, selected_scenario, data_status):
-#     """作成ブループリントタブの内容を初期化"""
-#     if not selected_scenario or not data_status or style.get('display') == 'none':
-#         raise PreventUpdate
-#     try:
-#         return create_blueprint_analysis_tab()
-#     except Exception as e:
-#         log.error(f"作成ブループリントタブの初期化エラー: {str(e)}")
-#         return html.Div(f"エラーが発生しました: {str(e)}", style={'color': 'red'})
-# 
+@safe_callback
+def initialize_blueprint_analysis_content(style, selected_scenario, data_status):
+    """作成ブループリントタブの内容を初期化"""
+    if not selected_scenario or not data_status or style.get('display') == 'none':
+        raise PreventUpdate
+    try:
+        return create_blueprint_analysis_tab()
+    except Exception as e:
+        log.error(f"作成ブループリントタブの初期化エラー: {str(e)}")
+        return html.Div(f"エラーが発生しました: {str(e)}", style={'color': 'red'})
 @app.callback(
     Output('logic-analysis-content', 'children'),
     Input('logic-analysis-tab-container', 'style'),
     State('scenario-dropdown', 'value'),
     State('data-loaded', 'data'),
 )
-# ===== COMMENTED OUT: initialize_logic_analysis_content (Phase 3.1: Legacy callback disabled after Phase 2+) =====
-# @safe_callback
-# def initialize_logic_analysis_content(style, selected_scenario, data_status):
-#     """ロジック解明タブの内容を初期化"""
-#     if not selected_scenario or not data_status or style.get('display') == 'none':
-#         raise PreventUpdate
-#     try:
-#         return create_creation_logic_analysis_tab()
-#     except Exception as e:
-#         log.error(f"ロジック解明タブの初期化エラー: {str(e)}")
-#         return html.Div(f"エラーが発生しました: {str(e)}", style={'color': 'red'})
-# 
+@safe_callback
+def initialize_logic_analysis_content(style, selected_scenario, data_status):
+    """ロジック解明タブの内容を初期化"""
+    if not selected_scenario or not data_status or style.get('display') == 'none':
+        raise PreventUpdate
+    try:
+        return create_creation_logic_analysis_tab()
+    except Exception as e:
+        log.error(f"ロジック解明タブの初期化エラー: {str(e)}")
+        return html.Div(f"エラーが発生しました: {str(e)}", style={'color': 'red'})
 # 
 @app.callback(
     Output('individual-analysis-content', 'children', allow_duplicate=True),
@@ -8083,18 +8055,16 @@ def update_tab_visibility(active_tab, selected_scenario, data_status):
     State('data-loaded', 'data'),
     prevent_initial_call=True
 )
-# ===== COMMENTED OUT: initialize_individual_analysis_content (Phase 3.1: Legacy callback disabled after Phase 2+) =====
-# @safe_callback
-# def initialize_individual_analysis_content(style, selected_scenario, data_status):
-#     """職員個別分析タブの内容を初期化"""
-#     if not selected_scenario or not data_status or style.get('display') == 'none':
-#         raise PreventUpdate
-#     try:
-#         return create_individual_analysis_tab()
-#     except Exception as e:
-#         log.error(f"職員個別分析タブの初期化エラー: {str(e)}")
-#         return html.Div(f"エラーが発生しました: {str(e)}", style={'color': 'red'})
-# 
+@safe_callback
+def initialize_individual_analysis_content(style, selected_scenario, data_status):
+    """職員個別分析タブの内容を初期化"""
+    if not selected_scenario or not data_status or style.get('display') == 'none':
+        raise PreventUpdate
+    try:
+        return create_individual_analysis_tab()
+    except Exception as e:
+        log.error(f"職員個別分析タブの初期化エラー: {str(e)}")
+        return html.Div(f"エラーが発生しました: {str(e)}", style={'color': 'red'})
 # 
 @app.callback(
     Output({'type': 'heatmap-filter-employment', 'index': ALL}, 'options'),
@@ -9777,18 +9747,16 @@ def _unused_update_progress_bar(n_intervals, progress_data):
 #     State('scenario-dropdown', 'value'),
 #     State('data-loaded', 'data'),
 # )
-# ===== COMMENTED OUT: initialize_ai_analysis_content (Phase 3.1: Legacy callback disabled after Phase 2+) =====
-# @safe_callback
-# def initialize_ai_analysis_content(style, selected_scenario, data_status):
-#     """AI分析タブの内容を初期化"""
-#     if not selected_scenario or not data_status or style.get('display') == 'none':
-#         raise PreventUpdate
-#     try:
-#         return create_ai_analysis_tab()
-#     except Exception as e:
-#         log.error(f"AI分析タブの初期化エラー: {str(e)}")
-#         return html.Div(f"エラーが発生しました: {str(e)}", style={'color': 'red'})
-#
+@safe_callback
+def initialize_ai_analysis_content(style, selected_scenario, data_status):
+    """AI分析タブの内容を初期化"""
+    if not selected_scenario or not data_status or style.get('display') == 'none':
+        raise PreventUpdate
+    try:
+        return create_ai_analysis_tab()
+    except Exception as e:
+        log.error(f"AI分析タブの初期化エラー: {str(e)}")
+        return html.Div(f"エラーが発生しました: {str(e)}", style={'color': 'red'})
 # 
 def create_ai_analysis_tab() -> html.Div:
     """Mind Reader分析タブを作成（app.py統一仕様）"""
