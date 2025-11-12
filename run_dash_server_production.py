@@ -7,7 +7,14 @@ Gunicornと組み合わせて使用されます。
 """
 import os
 import sys
+import dash_app
 from dash_app import app
+
+# Deploy 20.11.2: 本番環境でのcallback登録
+# Gunicornが app.server を参照する前にcallbackを登録する必要がある
+print("[Deploy 20.11.2] Registering interactive callbacks for production...")
+dash_app.register_interactive_callbacks(app)
+print("[Deploy 20.11.2] Callbacks registered: 24 callbacks (16 initialize + 8 update)")
 
 # Flask serverをGunicorn用に公開
 server = app.server

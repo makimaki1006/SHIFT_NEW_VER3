@@ -373,10 +373,9 @@ if __name__ == "__main__":
     dash_app.initialize_visualization_engine()
 
     # Phase 2: Register interactive callbacks
-    # Deploy 20.11修正: dash_app.pyのモジュールレベルで自動登録されるため、
-    # ここでの明示的な呼び出しは不要（二重登録を防ぐためコメントアウト）
-    # print("[Phase 2] インタラクティブcallbackを登録しています...")
-    # dash_app.register_interactive_callbacks(app)
+    # Deploy 20.11.2: 明示的にcallbackを登録（ローカルE2E環境用）
+    print("[Phase 2] インタラクティブcallbackを登録しています...")
+    dash_app.register_interactive_callbacks(app)
 
     # Register shortage analysis callbacks to our independent app instance
     print("[Phase 2] 不足分析callbackを登録しています...")

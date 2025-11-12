@@ -10822,14 +10822,11 @@ def register_interactive_callbacks(app_instance):
 # ============================================================================
 
 # ============================================================================
-# AUTO-REGISTER CALLBACKS FOR PRODUCTION ENVIRONMENT
+# CALLBACK REGISTRATION
 # ============================================================================
-# Deploy 20.11修正: 本番環境でコールバックが登録されない問題を修正
-# run_dash_server_production.py は app をimportするだけなので、
-# ここでモジュールレベルで自動的にコールバックを登録する
-log.info("[Deploy 20.11] Auto-registering interactive callbacks...")
-register_interactive_callbacks(app)
-log.info("[Deploy 20.11] Callbacks registered: 24 callbacks (16 initialize + 8 update)")
+# Deploy 20.11.2修正: モジュールレベル自動登録は二重登録を引き起こすため削除
+# 各エントリーポイント（run_dash_server.py, run_dash_server_production.py）で
+# 明示的に register_interactive_callbacks(app) を呼び出す必要がある
 
 # --- Export app for production server ---
 __all__ = ['app']
