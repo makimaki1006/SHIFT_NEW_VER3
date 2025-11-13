@@ -7430,13 +7430,16 @@ def process_upload(contents, filename):
                 }, [], None, {'display': 'none'}
 
         elif file_ext in {'.xlsx', '.csv'}:
-            # 一時ディレクトリ作成（単一ファイル用）
+            # Phase 1: セッション専用の一時ディレクトリ作成（マルチユーザー対応）
+            # グローバルTEMP_DIR_OBJは後方互換性のため残すが、SessionDataには専用ディレクトリを使用
+            session_temp_dir = tempfile.TemporaryDirectory(prefix="shift_suite_dash_single_")
+            temp_dir_path = Path(session_temp_dir.name)
+            log.info(f"[データ入稿] セッション専用一時ディレクトリ作成: {temp_dir_path}")
+
+            # 後方互換性のためグローバルTEMP_DIR_OBJも更新（将来削除予定）
             if TEMP_DIR_OBJ:
                 TEMP_DIR_OBJ.cleanup()
-
-            TEMP_DIR_OBJ = tempfile.TemporaryDirectory(prefix="shift_suite_dash_")
-            temp_dir_path = Path(TEMP_DIR_OBJ.name)
-            log.info(f"[データ入稿] 一時ディレクトリ作成: {temp_dir_path}")
+            TEMP_DIR_OBJ = session_temp_dir
 
             content_type, content_string = contents.split(',')
             decoded = base64.b64decode(content_string)
@@ -7516,7 +7519,7 @@ def process_upload(contents, filename):
                 scenarios=scenarios_dict,
                 source_filename=filename,
                 workspace_root=temp_dir_path,
-                temp_dir=TEMP_DIR_OBJ,  # グローバル変数を使用（Phase 1.5で修正予定）
+                temp_dir=session_temp_dir,  # セッション専用ディレクトリ（マルチユーザー対応）
                 missing_artifacts={},
                 slot_info=DETECTED_SLOT_INFO.copy()
             )
@@ -7529,9 +7532,10 @@ def process_upload(contents, filename):
             metadata = session.metadata()
 
             # data-loadedデータ（後方互換性のため）
+            # ZIP分岐と同様にSessionData.scenarios[s].root_pathを使用（統一されたパス取得）
             data_loaded = {
                 'success': True,
-                'scenarios': scenario_paths,
+                'scenarios': {s: str(session.scenarios[s].root_path) for s in scenarios_dict.keys()},
                 'file_info': {
                     'filename': filename,
                     'size_mb': round(len(decoded) / (1024 * 1024), 2),
