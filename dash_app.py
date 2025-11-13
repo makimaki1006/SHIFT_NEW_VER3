@@ -6775,14 +6775,17 @@ def update_responsive_layout(device_info):
 
 #     return components
 
-@app.callback(
-    Output('individual-analysis-content', 'children', allow_duplicate=True),
-    Input('individual-staff-dropdown', 'value'),
-    Input('synergy-analysis-type', 'value'),
-    prevent_initial_call=True
-)
-@safe_callback
-def update_individual_analysis_content(selected_staff, synergy_type):
+# Deploy 20.11.4: 重複callback登録を防止
+# このcallbackはグローバル変数を使用（セッション分離なし）
+# Phase 1で _generate_individual_basic_analysis() にシナジー分析を統合予定
+# @app.callback(
+#     Output('individual-analysis-content', 'children', allow_duplicate=True),
+#     Input('individual-staff-dropdown', 'value'),
+#     Input('synergy-analysis-type', 'value'),
+#     prevent_initial_call=True
+# )
+# @safe_callback
+def update_individual_analysis_content_OLD_PHASE2(selected_staff, synergy_type):
     """職員選択に応じて分析コンテンツを更新する"""
     if not selected_staff:
         raise PreventUpdate
@@ -8953,25 +8956,27 @@ def update_wage_inputs(by_key):
 # Phase 2:     return "キャッシュクリア"
 
 
-@app.callback(
-    Output('individual-analysis-content', 'children', allow_duplicate=True),
-    Input('individual-staff-dropdown', 'value'),
-    prevent_initial_call=True
-)
-@safe_callback
-def update_individual_analysis_content(selected_staff):
-    """
-    職員選択に応じて基本分析を更新（Pattern A - Phase 1）
+# Deploy 20.11.4: Pattern A未完成実装を完全無効化
+# 全ロジックがコメントアウト済みで動作不可のため削除
+# @app.callback(
+#     Output('individual-analysis-content', 'children', allow_duplicate=True),
+#     Input('individual-staff-dropdown', 'value'),
+#     prevent_initial_call=True
+# )
+# @safe_callback
+# def update_individual_analysis_content(selected_staff):
+#     """
+#     職員選択に応じて基本分析を更新（Pattern A - Phase 1）
 #     Phase 1実装:
 #     - シナジー分析は除外（ヘルパー関数に移譲）
 #     - グローバル変数は使用しない
 #     """
 #     if not selected_staff:
 #         raise PreventUpdate
-# 
+#
 #     log.info(f"[Individual] Callback: 職員選択 = {selected_staff}")
-# 
-    # ヘルパー関数に全ロジックを委譲
+#
+#     # ヘルパー関数に全ロジックを委譲
 #     return _generate_individual_basic_analysis(selected_staff)
 # 
 # 
