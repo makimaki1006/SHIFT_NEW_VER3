@@ -7403,9 +7403,10 @@ def process_upload(contents, filename):
                 first_scenario = scenarios[0]
 
                 # data-loaded互換データ（後方互換性のため）
+                # 正しい実体パスを使用（フォールバックケース: out_*なしZIP対応）
                 data_loaded = {
                     'success': True,
-                    'scenarios': {s: str(session.workspace_root / s) for s in scenarios},
+                    'scenarios': {s: str(session.scenarios[s].root_path) for s in scenarios},
                     'file_info': {
                         'filename': filename,
                         'scenarios_count': len(scenarios)
