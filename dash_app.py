@@ -7064,6 +7064,7 @@ app.layout = html.Div([
     ], style={'padding': '0 20px', 'marginTop': '20px'}),
     dcc.Interval(id='log-interval', interval=1000),
     dcc.Interval(id='system-monitor-interval', interval=5000),  # システム監視用インターバル
+    dcc.Interval(id='session-cleanup-interval', interval=300000, n_intervals=0),  # Phase 1: セッションクリーンアップ（5分毎）
 
 ], style={'backgroundColor': '#f5f5f5', 'minHeight': '100vh'})
 
@@ -7134,6 +7135,30 @@ def update_responsive_layout(device_info):
         header_classes.append('desktop-header')
     
     return ' '.join(content_classes), ' '.join(header_classes)
+
+# Phase 1: セッションクリーンアップコールバック（5分毎）
+@app.callback(
+    Output('session-cleanup-interval', 'n_intervals'),
+    Input('session-cleanup-interval', 'n_intervals'),
+    prevent_initial_call=True
+)
+def periodic_session_cleanup(n):
+    """
+    定期的に期限切れセッションをクリーンアップ
+
+    Phase 1: メモリリークとディスク枯渇を防ぐため、5分ごとに実行
+    - タイムアウトしたセッションを削除
+    - 最大セッション数を超えた場合、古いセッションから削除
+    - 各セッションのTempディレクトリをクリーンアップ
+    """
+    try:
+        cleaned_count = cleanup_expired_sessions()
+        if cleaned_count > 0:
+            log.info(f"[Phase 1] 定期クリーンアップ完了: {cleaned_count}個のセッションを削除")
+        return n if n else 0
+    except Exception as e:
+        log.error(f"[Phase 1] セッションクリーンアップエラー: {e}", exc_info=True)
+        return n if n else 0
 
 # 進捗表示更新コールバック（レスポンシブ対応）
 # @app.callback(
