@@ -378,6 +378,7 @@ class SessionData:
     workspace_root: Optional[Path] = None
     temp_dir: Optional[tempfile.TemporaryDirectory] = field(default=None, repr=False)
     missing_artifacts: Dict[str, List[str]] = field(default_factory=dict)
+    slot_info: Dict[str, Any] = field(default_factory=lambda: {'slot_minutes': 15, 'source': 'default'})
 
     def available_scenarios(self) -> List[str]:
         return list(self.scenarios.keys())
@@ -400,6 +401,7 @@ class SessionData:
                 "scenario": scenario_key,
                 "scenarios": self.available_scenarios(),
                 "missing_artifacts": self.missing_artifacts.get(scenario_key, []),
+                "slot_info": self.slot_info,  # Phase 1: スロット情報を追加
             }
         )
         return meta
@@ -1073,6 +1075,16 @@ def load_session_data_from_zip(contents: str, filename: Optional[str]) -> Sessio
         temp_dir=temp_dir,
         missing_artifacts=missing,
     )
+
+    # Phase 1: 動的スロット検出を実行してSessionDataに設定
+    try:
+        global DETECTED_SLOT_INFO
+        detect_slot_intervals_from_data(temp_root, list(scenarios.keys()))
+        session.slot_info = DETECTED_SLOT_INFO.copy()
+        log.info(f"[SessionData] スロット検出完了: {session.slot_info['slot_minutes']}分間隔 (source: {session.slot_info['source']})")
+    except Exception as e:
+        log.warning(f"[SessionData] スロット検出エラー: {e}")
+        # デフォルト値を使用（既にfield(default_factory)で設定済み）
 
     # Log performance metrics
     duration = time.time() - start_time
@@ -7335,57 +7347,99 @@ def process_upload(contents, filename):
                 fail_step("validation", f"検証処理エラー: {str(e)}")
             # 検証に失敗した場合は従来の処理を継続
 
-    # 一時ディレクトリ作成
-    if TEMP_DIR_OBJ:
-        TEMP_DIR_OBJ.cleanup()
-
-    TEMP_DIR_OBJ = tempfile.TemporaryDirectory(prefix="shift_suite_dash_")
-    temp_dir_path = Path(TEMP_DIR_OBJ.name)
-    log.info(f"[データ入稿] 一時ディレクトリ作成: {temp_dir_path}")
-
     # ファイル処理（進捗ログ付き）
     if processing_monitor:
         start_step("extraction", "データ抽出を開始...")
-    
-    content_type, content_string = contents.split(',')
-    decoded = base64.b64decode(content_string)
-    log.info(f"[データ入稿] ファイルデコード完了: {len(decoded)} bytes")
-    
+
+    log.info(f"[データ入稿] ファイルデコード開始")
     if processing_monitor:
-        update_progress("extraction", 30, "ファイルデコード完了")
+        update_progress("extraction", 30, "ファイルデコード中...")
 
     try:
         file_ext = Path(filename).suffix.lower()
-        
-        if file_ext == '.zip':
-            # ZIPファイル処理
-            log.info("[データ入稿] ZIPファイル展開開始")
-            if processing_monitor:
-                update_progress("extraction", 50, "ZIPファイル展開中...")
-                
-            with zipfile.ZipFile(io.BytesIO(decoded)) as zf:
-                zf.extractall(temp_dir_path)
-            log.info(f"[データ入稿] ZIP展開完了: {temp_dir_path}")
-            
-            if processing_monitor:
-                update_progress("extraction", 80, "展開完了、シナリオ検出中...")
 
-            # シナリオ検出
-            scenarios = [d.name for d in temp_dir_path.iterdir() if d.is_dir() and d.name.startswith('out_')]
-            if not scenarios:
-                log.error("[データ入稿] 分析シナリオフォルダ未検出")
+        if file_ext == '.zip':
+            # Phase 1: load_session_data_from_zip()を使用してSessionDataを作成
+            log.info("[データ入稿] load_session_data_from_zip()でSessionData作成開始")
+            if processing_monitor:
+                update_progress("extraction", 50, "SessionData作成中...")
+
+            try:
+                # グローバルTEMP_DIR_OBJをクリーンアップ（新しいSessionData.temp_dirを使用するため）
+                if TEMP_DIR_OBJ:
+                    TEMP_DIR_OBJ.cleanup()
+                    TEMP_DIR_OBJ = None
+
+                # SessionDataを作成（内部でZIP展開、シナリオ検出、スロット検出を実行）
+                session = load_session_data_from_zip(contents, filename)
+
+                log.info(f"[データ入稿] SessionData作成完了: {len(session.scenarios)}シナリオ")
                 if processing_monitor:
-                    fail_step("extraction", "分析シナリオフォルダが見つかりません")
+                    update_progress("extraction", 80, f"SessionData作成完了: {len(session.scenarios)}シナリオ")
+
+                # セッションIDを生成してSESSION_REGISTRYに登録
+                import uuid
+                session_id = str(uuid.uuid4())
+                register_session(session_id, session)
+
+                log.info(f"[SessionData] セッション登録: session_id={session_id}")
+                if processing_monitor:
+                    complete_step("extraction", f"セッション登録完了: {session_id}")
+
+                # metadataを取得
+                metadata = session.metadata()
+                scenarios = session.available_scenarios()
+
+                # シナリオオプション作成
+                scenario_name_map = {
+                    'out_median_based': '📊 中央値ベース分析',
+                    'out_mean_based': '📈 平均値ベース分析',
+                    'out_p25_based': '📉 25パーセンタイル分析',
+                }
+                scenario_options = [
+                    {'label': scenario_name_map.get(s, f"📋 {s.replace('out_', '')}"), 'value': s}
+                    for s in scenarios
+                ]
+                first_scenario = scenarios[0]
+
+                # data-loaded互換データ（後方互換性のため）
+                data_loaded = {
+                    'success': True,
+                    'scenarios': {s: str(session.workspace_root / s) for s in scenarios},
+                    'file_info': {
+                        'filename': filename,
+                        'scenarios_count': len(scenarios)
+                    }
+                }
+
+                # 処理完了を記録
+                if processing_monitor:
+                    start_step("preprocessing", "前処理準備完了")
+                    complete_step("preprocessing", "データ入稿フロー完了")
+
+                log.info(f"[データ入稿] ZIP処理完了 - シナリオ数: {len(scenarios)}")
+                return session_id, metadata, data_loaded, scenario_options, first_scenario, {'display': 'block'}
+
+            except Exception as e:
+                log.error(f"[データ入稿] SessionData作成エラー: {e}", exc_info=True)
+                if processing_monitor:
+                    fail_step("extraction", f"SessionData作成エラー: {str(e)}")
                 return None, None, {
-                    'error': '分析シナリオのフォルダが見つかりません。\n' +
-                           'ZIPファイル内に "out_" で始まるフォルダが必要です。'
+                    'error': f'SessionData作成エラー:\n{str(e)}\n\nファイル形式や内容を確認してください。'
                 }, [], None, {'display': 'none'}
 
-            log.info(f"[データ入稿] シナリオ検出: {scenarios}")
-            if processing_monitor:
-                complete_step("extraction", f"シナリオ{len(scenarios)}個を検出")
-            
         elif file_ext in {'.xlsx', '.csv'}:
+            # 一時ディレクトリ作成（単一ファイル用）
+            if TEMP_DIR_OBJ:
+                TEMP_DIR_OBJ.cleanup()
+
+            TEMP_DIR_OBJ = tempfile.TemporaryDirectory(prefix="shift_suite_dash_")
+            temp_dir_path = Path(TEMP_DIR_OBJ.name)
+            log.info(f"[データ入稿] 一時ディレクトリ作成: {temp_dir_path}")
+
+            content_type, content_string = contents.split(',')
+            decoded = base64.b64decode(content_string)
+            log.info(f"[データ入稿] ファイルデコード完了: {len(decoded)} bytes")
             # 単一ファイル処理（新機能）
             log.info(f"[データ入稿] 単一ファイル処理開始: {file_ext}")
             
@@ -7404,74 +7458,69 @@ def process_upload(contents, filename):
             
             scenarios = ["out_single_file"]
             log.info(f"[データ入稿] 単一ファイルシナリオ作成完了")
-            
+
+            # 動的スロット検出を実行（単一ファイル用）
+            log.info("[データ入稿] 動的スロット検出開始")
+            try:
+                detect_slot_intervals_from_data(temp_dir_path, scenarios)
+                log.info(f"[データ入稿] 動的スロット検出完了: {DETECTED_SLOT_INFO['slot_minutes']}分間隔")
+            except Exception as e:
+                log.warning(f"[データ入稿] 動的スロット検出エラー: {e}")
+                # エラーが発生してもデフォルト値で継続
+
+            # 日本語ラベル用のマッピング（単一ファイル用）
+            scenario_name_map = {
+                'out_single_file': '📁 単一ファイル分析',
+            }
+
+            scenario_options = [
+                {'label': scenario_name_map.get(s, f"📋 {s.replace('out_', '')}"), 'value': s}
+                for s in scenarios
+            ]
+            first_scenario = scenarios[0]
+            scenario_paths = {d.name: str(d) for d in temp_dir_path.iterdir() if d.is_dir()}
+
+            log.info(f"[データ入稿] 処理完了 - シナリオ数: {len(scenarios)}")
+
+            # 処理完了を記録
+            if processing_monitor:
+                start_step("preprocessing", "前処理準備完了")
+                complete_step("preprocessing", "データ入稿フロー完了")
+
+            # 簡易SessionData（Phase 1 - 単一ファイル用、将来的に統合予定）
+            import uuid
+            session_id = str(uuid.uuid4())
+
+            metadata = {
+                'scenarios': scenarios,
+                'default_scenario': first_scenario,
+                'slot_info': DETECTED_SLOT_INFO.copy(),
+                'file_info': {
+                    'filename': filename,
+                    'size_mb': round(len(decoded) / (1024 * 1024), 2),
+                    'type': file_ext,
+                    'scenarios_count': len(scenarios)
+                },
+                'temp_root': str(temp_dir_path)
+            }
+
+            log.info(f"[SessionData] 簡易セッション作成: session_id={session_id}")
+
+            # data-loadedデータ
+            data_loaded = {
+                'success': True,
+                'scenarios': scenario_paths,
+                'file_info': metadata['file_info']
+            }
+
+            return session_id, metadata, data_loaded, scenario_options, first_scenario, {'display': 'block'}
+
         else:
             log.error(f"[データ入稿] 未サポート形式: {file_ext}")
             return None, None, {
                 'error': f'未サポートのファイル形式です: {file_ext}\n' +
                        'サポート形式: .zip, .xlsx, .csv'
             }, [], None, {'display': 'none'}
-        
-        # 動的スロット検出を実行
-        log.info("[データ入稿] 動的スロット検出開始") 
-        try:
-            detect_slot_intervals_from_data(temp_dir_path, scenarios)
-            log.info(f"[データ入稿] 動的スロット検出完了: {DETECTED_SLOT_INFO['slot_minutes']}分間隔")
-        except Exception as e:
-            log.warning(f"[データ入稿] 動的スロット検出エラー: {e}")
-            # エラーが発生してもデフォルト値で継続
-
-        # 日本語ラベル用のマッピング（拡張版）
-        scenario_name_map = {
-            'out_median_based': '📊 中央値ベース分析',
-            'out_mean_based': '📈 平均値ベース分析',
-            'out_p25_based': '📉 25パーセンタイル分析',
-            'out_single_file': '📁 単一ファイル分析',
-        }
-
-        scenario_options = [
-            {'label': scenario_name_map.get(s, f"📋 {s.replace('out_', '')}"), 'value': s}
-            for s in scenarios
-        ]
-        first_scenario = scenarios[0]
-        scenario_paths = {d.name: str(d) for d in temp_dir_path.iterdir() if d.is_dir()}
-        
-        log.info(f"[データ入稿] 処理完了 - シナリオ数: {len(scenarios)}")
-
-        # 処理完了を記録
-        if processing_monitor:
-            start_step("preprocessing", "前処理準備完了")
-            complete_step("preprocessing", "データ入稿フロー完了")
-
-        # Phase 1: SessionData作成と登録
-        import uuid
-        session_id = str(uuid.uuid4())
-
-        # SessionDataを簡易的に作成（後でload_session_data_from_zip統合予定）
-        # とりあえずmetadataのみ作成
-        metadata = {
-            'scenarios': scenarios,
-            'default_scenario': first_scenario,
-            'slot_info': DETECTED_SLOT_INFO.copy(),
-            'file_info': {
-                'filename': filename,
-                'size_mb': round(len(decoded) / (1024 * 1024), 2),
-                'type': file_ext,
-                'scenarios_count': len(scenarios)
-            },
-            'temp_root': str(temp_dir_path)
-        }
-
-        log.info(f"[SessionData] セッション作成: session_id={session_id}")
-
-        # 従来のdata-loadedデータ
-        data_loaded = {
-            'success': True,
-            'scenarios': scenario_paths,
-            'file_info': metadata['file_info']
-        }
-
-        return session_id, metadata, data_loaded, scenario_options, first_scenario, {'display': 'block'}
 
     except zipfile.BadZipFile:
         log.error("[データ入稿] 破損したZIPファイル")
