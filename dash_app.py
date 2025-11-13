@@ -6118,7 +6118,7 @@ def _generate_individual_analysis_with_synergy(selected_staff: str, synergy_type
 
     # long_dfとshortage_dfを取得
     long_df = data_get('long_df')
-    shortage_df = data_get('shortage_role_summary')
+    shortage_df = data_get('shortage_time')  # 時間軸データを使用（旧callback準拠）
 
     if long_df is None:
         long_df = pd.DataFrame()
@@ -6126,6 +6126,46 @@ def _generate_individual_analysis_with_synergy(selected_staff: str, synergy_type
         shortage_df = pd.DataFrame()
 
     log.info(f"[SYNERGY] 分析タイプ: {synergy_type}")
+    log.info(f"[SYNERGY] long_df shape: {long_df.shape}")
+    log.info(f"[SYNERGY] shortage_df shape: {shortage_df.shape}")
+
+    # shortage_timeが空の場合、フォールバック処理（旧callback準拠）
+    if shortage_df.empty:
+        log.info("[SYNERGY] shortage_timeが空のため、フォールバック処理を開始")
+
+        # 1. 現在のシナリオディレクトリから直接読み取り
+        try:
+            current_scenario_dir = _get_current_scenario_dir()
+            if current_scenario_dir:
+                from pathlib import Path
+                analysis_results_path = Path(current_scenario_dir) / "analysis_results"
+                shortage_time_path = analysis_results_path / "shortage_time.parquet"
+
+                if shortage_time_path.exists():
+                    log.info(f"[SYNERGY] 直接ファイルから読み取り: {shortage_time_path}")
+                    shortage_df = pd.read_parquet(shortage_time_path)
+                    log.info(f"[SYNERGY] 直接読み取り成功: {shortage_df.shape}")
+                else:
+                    log.info(f"[SYNERGY] ファイルが見つかりません: {shortage_time_path}")
+        except Exception as e:
+            log.error(f"[SYNERGY] 直接読み取りエラー: {e}")
+
+        # 2. まだ空の場合、heat_ALLデータを試す
+        if shortage_df.empty:
+            heat_all_df = data_get('heat_ALL', pd.DataFrame())
+            if not heat_all_df.empty:
+                log.info(f"[SYNERGY] heat_ALLを使用: {heat_all_df.shape}")
+                shortage_df = create_shortage_from_heat_all(heat_all_df)
+                log.info(f"[SYNERGY] 生成されたshortage_df: {shortage_df.shape}")
+
+        # 3. まだ空の場合、excess_timeを試す（符号を反転）
+        if shortage_df.empty:
+            excess_df = data_get('excess_time', pd.DataFrame())
+            if not excess_df.empty:
+                log.info(f"[SYNERGY] excess_timeを使用（符号反転): {excess_df.shape}")
+                shortage_df = -excess_df
+                shortage_df = shortage_df.clip(lower=0)
+                log.info(f"[SYNERGY] excess_timeから生成: {shortage_df.shape}")
 
     if not long_df.empty:
         try:
