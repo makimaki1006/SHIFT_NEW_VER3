@@ -7487,30 +7487,56 @@ def process_upload(contents, filename):
                 start_step("preprocessing", "前処理準備完了")
                 complete_step("preprocessing", "データ入稿フロー完了")
 
-            # 簡易SessionData（Phase 1 - 単一ファイル用、将来的に統合予定）
+            # Phase 1: 単一ファイル用SessionData作成・登録
             import uuid
+            from collections import OrderedDict
+
             session_id = str(uuid.uuid4())
 
-            metadata = {
-                'scenarios': scenarios,
-                'default_scenario': first_scenario,
-                'slot_info': DETECTED_SLOT_INFO.copy(),
+            # 簡易ScenarioData作成（空のDataFrameで初期化）
+            scenario_dir_path = temp_dir_path / "out_single_file"
+            scenario_data = ScenarioData(
+                name="out_single_file",
+                root_path=scenario_dir_path,
+                pre_aggregated=pd.DataFrame(),
+                heat_staff=pd.DataFrame(),
+                heat_ratio=pd.DataFrame(),
+                shortage_time=pd.DataFrame(),
+                shortage_ratio=pd.DataFrame(),
+                roles=["all"],
+                employments=["all"]
+            )
+
+            # SessionData作成
+            scenarios_dict = OrderedDict()
+            scenarios_dict["out_single_file"] = scenario_data
+
+            session = SessionData(
+                scenarios=scenarios_dict,
+                source_filename=filename,
+                workspace_root=temp_dir_path,
+                temp_dir=TEMP_DIR_OBJ,  # グローバル変数を使用（Phase 1.5で修正予定）
+                missing_artifacts={},
+                slot_info=DETECTED_SLOT_INFO.copy()
+            )
+
+            # SESSION_REGISTRYに登録
+            register_session(session_id, session)
+            log.info(f"[SessionData] 単一ファイルセッション登録完了: session_id={session_id}")
+
+            # metadata取得
+            metadata = session.metadata()
+
+            # data-loadedデータ（後方互換性のため）
+            data_loaded = {
+                'success': True,
+                'scenarios': scenario_paths,
                 'file_info': {
                     'filename': filename,
                     'size_mb': round(len(decoded) / (1024 * 1024), 2),
                     'type': file_ext,
                     'scenarios_count': len(scenarios)
-                },
-                'temp_root': str(temp_dir_path)
-            }
-
-            log.info(f"[SessionData] 簡易セッション作成: session_id={session_id}")
-
-            # data-loadedデータ
-            data_loaded = {
-                'success': True,
-                'scenarios': scenario_paths,
-                'file_info': metadata['file_info']
+                }
             }
 
             return session_id, metadata, data_loaded, scenario_options, first_scenario, {'display': 'block'}
