@@ -7273,6 +7273,8 @@ def update_individual_analysis_content_OLD_PHASE2(selected_staff, synergy_type):
 
 
 @app.callback(
+    Output('session-id', 'data'),
+    Output('session-metadata', 'data'),
     Output('data-loaded', 'data'),
     Output('scenario-dropdown', 'options'),
     Output('scenario-dropdown', 'value'),
@@ -7282,7 +7284,7 @@ def update_individual_analysis_content_OLD_PHASE2(selected_staff, synergy_type):
 )
 @safe_callback
 def process_upload(contents, filename):
-    """改善されたファイルアップロード処理（データフロー最適化版）"""
+    """改善されたファイルアップロード処理（SessionData対応・Phase 1）"""
     if contents is None:
         raise PreventUpdate
 
@@ -7313,8 +7315,8 @@ def process_upload(contents, filename):
                 
                 if processing_monitor:
                     fail_step("validation", formatted_error)
-                
-                return {
+
+                return None, None, {
                     'error': formatted_error,
                     'validation_result': validation_result
                 }, [], None, {'display': 'none'}
@@ -7374,7 +7376,7 @@ def process_upload(contents, filename):
                 log.error("[データ入稿] 分析シナリオフォルダ未検出")
                 if processing_monitor:
                     fail_step("extraction", "分析シナリオフォルダが見つかりません")
-                return {
+                return None, None, {
                     'error': '分析シナリオのフォルダが見つかりません。\n' +
                            'ZIPファイル内に "out_" で始まるフォルダが必要です。'
                 }, [], None, {'display': 'none'}
@@ -7405,7 +7407,7 @@ def process_upload(contents, filename):
             
         else:
             log.error(f"[データ入稿] 未サポート形式: {file_ext}")
-            return {
+            return None, None, {
                 'error': f'未サポートのファイル形式です: {file_ext}\n' +
                        'サポート形式: .zip, .xlsx, .csv'
             }, [], None, {'display': 'none'}
@@ -7435,32 +7437,51 @@ def process_upload(contents, filename):
         scenario_paths = {d.name: str(d) for d in temp_dir_path.iterdir() if d.is_dir()}
         
         log.info(f"[データ入稿] 処理完了 - シナリオ数: {len(scenarios)}")
-        
+
         # 処理完了を記録
         if processing_monitor:
             start_step("preprocessing", "前処理準備完了")
             complete_step("preprocessing", "データ入稿フロー完了")
-        
-        return {
-            'success': True,
-            'scenarios': scenario_paths,
+
+        # Phase 1: SessionData作成と登録
+        import uuid
+        session_id = str(uuid.uuid4())
+
+        # SessionDataを簡易的に作成（後でload_session_data_from_zip統合予定）
+        # とりあえずmetadataのみ作成
+        metadata = {
+            'scenarios': scenarios,
+            'default_scenario': first_scenario,
+            'slot_info': DETECTED_SLOT_INFO.copy(),
             'file_info': {
                 'filename': filename,
                 'size_mb': round(len(decoded) / (1024 * 1024), 2),
                 'type': file_ext,
                 'scenarios_count': len(scenarios)
-            }
-        }, scenario_options, first_scenario, {'display': 'block'}
+            },
+            'temp_root': str(temp_dir_path)
+        }
+
+        log.info(f"[SessionData] セッション作成: session_id={session_id}")
+
+        # 従来のdata-loadedデータ
+        data_loaded = {
+            'success': True,
+            'scenarios': scenario_paths,
+            'file_info': metadata['file_info']
+        }
+
+        return session_id, metadata, data_loaded, scenario_options, first_scenario, {'display': 'block'}
 
     except zipfile.BadZipFile:
         log.error("[データ入稿] 破損したZIPファイル")
-        return {
+        return None, None, {
             'error': '破損したZIPファイルです。\n' +
                    'ファイルが正しくダウンロードされているか確認してください。'
         }, [], None, {'display': 'none'}
     except Exception as e:
         log.error(f"[データ入稿] 処理エラー: {e}", exc_info=True)
-        return {
+        return None, None, {
             'error': f'ファイル処理中にエラーが発生しました:\n{str(e)}\n\n' +
                    'ファイル形式や内容を確認してください。'
         }, [], None, {'display': 'none'}
@@ -7470,11 +7491,18 @@ def process_upload(contents, filename):
     Output('kpi-data-store', 'data'),
     Output('main-content', 'children'),
     Input('scenario-dropdown', 'value'),
-    State('data-loaded', 'data')
+    State('data-loaded', 'data'),
+    State('session-id', 'data'),
+    State('session-metadata', 'data')
 )
 @safe_callback
-def update_main_content(selected_scenario, data_status):
-    """シナリオ選択に応じてデータを読み込み、メインUIを更新（按分方式対応）"""
+def update_main_content(selected_scenario, data_status, session_id, metadata):
+    """シナリオ選択に応じてデータを読み込み、メインUIを更新（SessionData対応・Phase 1）"""
+    # Phase 1: session_idを設定
+    if session_id:
+        _set_current_session_id(session_id)
+        log.info(f"[update_main_content] session_id設定: {session_id}")
+
     current_dir = _get_current_scenario_dir()
 
     # データステータスがない場合でも、デフォルトのシナリオが利用可能ならそれを使用
