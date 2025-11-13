@@ -5939,6 +5939,365 @@ def _generate_individual_basic_analysis(selected_staff: str) -> html.Div:
     ])
 
 
+def _generate_individual_analysis_with_synergy(selected_staff: str, synergy_type: str = 'basic') -> html.Div:
+    """
+    職員個別分析（シナジー分析含む）を生成する
+
+    Phase 2でのシナジー分析を含む完全な個別分析。
+    グローバル変数を使用せず、セッション分離に対応。
+
+    Args:
+        selected_staff: 選択された職員名
+        synergy_type: シナジー分析タイプ ('basic', 'same_role', 'all_roles', 'correlation_matrix')
+
+    Returns:
+        html.Div: 完全な個別分析レイアウト
+    """
+    if not selected_staff:
+        return html.Div("職員が選択されていません。")
+
+    # ローカル変数として初期化（グローバル変数を使用しない）
+    synergy_matrix_data = None
+    synergy_additional_info = html.Div()
+
+    # 必要なデータを一括で読み込む
+    long_df = data_get('long_df', pd.DataFrame())
+    fatigue_df = data_get('fatigue_score', pd.DataFrame())
+    fairness_df = data_get('fairness_after', pd.DataFrame())
+    shortage_df = data_get('shortage_time', pd.DataFrame())
+    excess_df = data_get('excess_time', pd.DataFrame())
+
+    if long_df.empty:
+        return html.P("勤務データが見つかりません。")
+
+    staff_df = long_df[long_df['staff'] == selected_staff].copy()
+
+    # --- 1. 勤務区分ごとの占有割合 ---
+    work_dist_fig = go.Figure(layout={'title': {'text': f'{selected_staff}さんの勤務割合'}})
+    if not staff_df.empty and 'code' in staff_df.columns:
+        work_records = staff_df[staff_df.get('parsed_slots_count', 1) > 0]
+        if not work_records.empty:
+            code_counts = work_records['code'].value_counts()
+            work_dist_fig = px.pie(
+                values=code_counts.tolist(), names=code_counts.index.tolist(),
+                title=f'{selected_staff}さんの勤務割合', hole=.3
+            )
+            work_dist_fig.update_traces(textposition='inside', textinfo='percent+label')
+
+    # --- 2. 不公平・疲労度の詳細スコア ---
+    fatigue_score, unfairness_score = "データなし", "データなし"
+    score_details_df = pd.DataFrame()
+    if not fatigue_df.empty:
+        fatigue_df_indexed = fatigue_df.set_index('staff') if 'staff' in fatigue_df.columns else fatigue_df
+        if selected_staff in fatigue_df_indexed.index:
+            fatigue_value = fatigue_df_indexed.loc[selected_staff, 'fatigue_score']
+            if hasattr(fatigue_value, 'item'):
+                fatigue_value = fatigue_value.item()
+            fatigue_score = f"{fatigue_value:.1f}"
+    if not fairness_df.empty and 'staff' in fairness_df.columns:
+        staff_fairness = fairness_df[fairness_df['staff'] == selected_staff]
+        if not staff_fairness.empty:
+            row = staff_fairness.iloc[0]
+            unfairness_score = f"{row.get('unfairness_score', 0):.2f}"
+            details_data = {
+                '指標': ['夜勤回数', '土日勤務回数', '連続勤務日数', '連続深夜勤務'],
+                '回数': [
+                    row.get('night_count', 0),
+                    row.get('weekend_count', 0),
+                    row.get('consecutive_days', 0),
+                    row.get('consecutive_nights', 0)
+                ]
+            }
+            score_details_df = pd.DataFrame(details_data)
+
+    # --- 3. 勤務頻度のカレンダービュー（ヒートマップ） ---
+    heatmap_fig = go.Figure(layout={'title': {'text': f'{selected_staff}さんの勤務カレンダー'}})
+    if not staff_df.empty and 'date' in staff_df.columns and 'parsed_slots_count' in staff_df.columns:
+        staff_df_copy = staff_df.copy()
+        staff_df_copy['date'] = pd.to_datetime(staff_df_copy['date'], errors='coerce')
+        staff_df_copy = staff_df_copy.dropna(subset=['date'])
+        staff_df_copy['month'] = staff_df_copy['date'].dt.to_period('M').astype(str)
+        staff_df_copy['day'] = staff_df_copy['date'].dt.day
+        staff_df_copy['weekday'] = staff_df_copy['date'].dt.dayofweek
+
+        months = sorted(staff_df_copy['month'].unique().tolist())
+        if months:
+            pivot_table = staff_df_copy.pivot_table(
+                index='day',
+                columns='month',
+                values='parsed_slots_count',
+                aggfunc='sum',
+                fill_value=0
+            )
+            heatmap_fig = go.Figure(data=go.Heatmap(
+                z=pivot_table.values,
+                x=pivot_table.columns.tolist(),
+                y=pivot_table.index.tolist(),
+                colorscale='Blues',
+                text=pivot_table.values,
+                texttemplate='%{text}',
+                textfont={"size": 10},
+                hovertemplate='月: %{x}<br>日: %{y}<br>シフト数: %{z}<extra></extra>'
+            ))
+            heatmap_fig.update_layout(
+                title=f'{selected_staff}さんの勤務カレンダー',
+                xaxis_title='月',
+                yaxis_title='日',
+                yaxis={'autorange': 'reversed'}
+            )
+
+    # --- 4. 人員過不足への影響度 ---
+    shortage_impact_data = []
+    excess_impact_data = []
+    if not shortage_df.empty and 'staff' in shortage_df.columns:
+        staff_shortage = shortage_df[shortage_df['staff'] == selected_staff]
+        if not staff_shortage.empty and 'date' in staff_shortage.columns and 'hours' in staff_shortage.columns:
+            shortage_impact_data = staff_shortage.groupby('date')['hours'].sum().reset_index()
+            shortage_impact_data.columns = ['date', 'shortage_hours']
+
+    if not excess_df.empty and 'staff' in excess_df.columns:
+        staff_excess = excess_df[excess_df['staff'] == selected_staff]
+        if not staff_excess.empty and 'date' in staff_excess.columns and 'hours' in staff_excess.columns:
+            excess_impact_data = staff_excess.groupby('date')['hours'].sum().reset_index()
+            excess_impact_data.columns = ['date', 'excess_hours']
+
+    impact_fig = go.Figure(layout={'title': {'text': f'{selected_staff}さんの配置による過不足影響'}})
+    if shortage_impact_data or excess_impact_data:
+        if shortage_impact_data:
+            shortage_df_local = pd.DataFrame(shortage_impact_data)
+            impact_fig.add_trace(go.Bar(
+                x=shortage_df_local['date'],
+                y=shortage_df_local['shortage_hours'],
+                name='不足時間',
+                marker_color='indianred'
+            ))
+        if excess_impact_data:
+            excess_df_local = pd.DataFrame(excess_impact_data)
+            impact_fig.add_trace(go.Bar(
+                x=excess_df_local['date'],
+                y=excess_df_local['excess_hours'],
+                name='余剰時間',
+                marker_color='lightseagreen'
+            ))
+        impact_fig.update_layout(
+            title=f'{selected_staff}さんの配置による過不足影響',
+            xaxis_title='日付',
+            yaxis_title='時間',
+            barmode='group'
+        )
+
+    # --- 5. 休暇取得傾向 ---
+    leave_fig = go.Figure(layout={'title': {'text': f'{selected_staff}さんの休暇取得傾向'}})
+    if not staff_df.empty and 'code' in staff_df.columns:
+        leave_codes = ['公休', '有休', '病休', '特休', '代休']
+        staff_df_copy_leave = staff_df.copy()
+        staff_df_copy_leave['date'] = pd.to_datetime(staff_df_copy_leave.get('date', []), errors='coerce')
+        staff_df_copy_leave = staff_df_copy_leave.dropna(subset=['date'])
+        staff_df_copy_leave['month'] = staff_df_copy_leave['date'].dt.to_period('M').astype(str)
+
+        leave_records = staff_df_copy_leave[staff_df_copy_leave['code'].isin(leave_codes)]
+        if not leave_records.empty:
+            leave_counts = leave_records.groupby(['month', 'code']).size().reset_index(name='count')
+            leave_fig = px.bar(
+                leave_counts,
+                x='month',
+                y='count',
+                color='code',
+                title=f'{selected_staff}さんの休暇取得傾向',
+                labels={'month': '月', 'count': '回数', 'code': '休暇種類'},
+                barmode='stack'
+            )
+            leave_fig.update_layout(xaxis={'categoryorder': 'category ascending'})
+
+    # --- 6. シナジー分析（既存ロジック流用） ---
+    synergy_fig = go.Figure(layout={'title': {'text': 'シナジー分析（準備中）'}})
+    synergy_additional_data = None
+
+    if synergy_type == 'basic':
+        synergy_result = analyze_synergy(selected_staff, analysis_type='basic')
+        if synergy_result and not synergy_result.empty:
+            synergy_fig = px.bar(
+                synergy_result,
+                x='other_staff',
+                y='synergy_score',
+                title=f'{selected_staff}さんとの相性（基本分析）',
+                labels={'other_staff': '他の職員', 'synergy_score': 'シナジースコア'},
+                color='synergy_score',
+                color_continuous_scale='RdYlGn'
+            )
+            synergy_fig.update_layout(xaxis={'categoryorder': 'total descending'})
+
+    elif synergy_type == 'same_role':
+        synergy_result = analyze_synergy(selected_staff, analysis_type='same_role')
+        if synergy_result and not synergy_result.empty:
+            synergy_fig = px.bar(
+                synergy_result,
+                x='other_staff',
+                y='synergy_score',
+                title=f'{selected_staff}さんとの相性（同職種限定）',
+                labels={'other_staff': '他の職員', 'synergy_score': 'シナジースコア'},
+                color='synergy_score',
+                color_continuous_scale='RdYlGn'
+            )
+            synergy_fig.update_layout(xaxis={'categoryorder': 'total descending'})
+
+    elif synergy_type == 'all_roles':
+        synergy_result = analyze_synergy(selected_staff, analysis_type='all_roles')
+        if synergy_result and not synergy_result.empty:
+            synergy_fig = px.bar(
+                synergy_result,
+                x='other_staff',
+                y='synergy_score',
+                color='role',
+                title=f'{selected_staff}さんとの相性（全職種）',
+                labels={'other_staff': '他の職員', 'synergy_score': 'シナジースコア', 'role': '職種'},
+                barmode='group'
+            )
+            synergy_fig.update_layout(xaxis={'categoryorder': 'total descending'})
+
+            synergy_additional_data = {
+                'overall_stats': {
+                    '全体平均シナジー': synergy_result['synergy_score'].mean(),
+                    '分析対象職員数': len(synergy_result),
+                    '対象職種数': synergy_result['role'].nunique() if 'role' in synergy_result.columns else 0
+                }
+            }
+
+    elif synergy_type == 'correlation_matrix':
+        synergy_matrix_result = analyze_synergy(selected_staff, analysis_type='correlation_matrix')
+        if synergy_matrix_result and not synergy_matrix_result.empty:
+            synergy_matrix_data = {
+                'matrix': synergy_matrix_result,
+                'summary': {
+                    '職員数': len(synergy_matrix_result),
+                    '全体平均シナジー': synergy_matrix_result.values[synergy_matrix_result.values != 0].mean() if (synergy_matrix_result.values != 0).any() else 0
+                }
+            }
+
+            synergy_fig = go.Figure(data=go.Heatmap(
+                z=synergy_matrix_result.values,
+                x=synergy_matrix_result.columns.tolist(),
+                y=synergy_matrix_result.index.tolist(),
+                colorscale='RdYlGn',
+                text=synergy_matrix_result.values,
+                texttemplate='%{text:.2f}',
+                textfont={"size": 8},
+                hovertemplate='職員1: %{y}<br>職員2: %{x}<br>シナジー: %{z:.3f}<extra></extra>'
+            ))
+            synergy_fig.update_layout(
+                title=f'職員間シナジーマトリックス（{selected_staff}さん中心）',
+                xaxis_title='職員',
+                yaxis_title='職員',
+                height=800
+            )
+
+            top_pairs = []
+            bottom_pairs = []
+            for i in range(len(synergy_matrix_result)):
+                for j in range(i+1, len(synergy_matrix_result)):
+                    staff1 = synergy_matrix_result.index[i]
+                    staff2 = synergy_matrix_result.columns[j]
+                    score = synergy_matrix_result.iloc[i, j]
+                    if score != 0:
+                        top_pairs.append({'staff1': staff1, 'staff2': staff2, 'score': score})
+                        bottom_pairs.append({'staff1': staff1, 'staff2': staff2, 'score': score})
+
+            top_pairs = sorted(top_pairs, key=lambda x: x['score'], reverse=True)[:5]
+            bottom_pairs = sorted(bottom_pairs, key=lambda x: x['score'])[:5]
+
+            synergy_additional_info = html.Div([
+                html.H5("トップ5の相性ペア", style={'marginTop': '20px'}),
+                html.Ul([
+                    html.Li(f"{pair['staff1']} ⇔ {pair['staff2']}: {pair['score']:.3f}")
+                    for pair in top_pairs
+                ]),
+                html.H5("要注意ペア（相性が低い）", style={'marginTop': '20px'}),
+                html.Ul([
+                    html.Li(f"{pair['staff1']} ⇔ {pair['staff2']}: {pair['score']:.3f}")
+                    for pair in bottom_pairs
+                ])
+            ])
+
+    # レイアウトの組み立て
+    layout = html.Div([
+        html.H3(f'{selected_staff}さんの個別分析', style={'textAlign': 'center', 'marginBottom': '20px'}),
+
+        # 勤務割合
+        html.Div([
+            dcc.Graph(figure=work_dist_fig)
+        ], style={'marginBottom': '20px'}),
+
+        # 疲労度と不公平度スコア
+        html.Div([
+            html.Div([
+                html.H4("疲労度スコア"),
+                html.P(fatigue_score, style={'fontSize': '24px', 'fontWeight': 'bold', 'color': 'darkred'}),
+            ], style={'display': 'inline-block', 'width': '48%', 'textAlign': 'center'}),
+            html.Div([
+                html.H4("不公平度スコア"),
+                html.P(unfairness_score, style={'fontSize': '24px', 'fontWeight': 'bold', 'color': 'darkblue'}),
+            ], style={'display': 'inline-block', 'width': '48%', 'textAlign': 'center'})
+        ], style={'marginBottom': '20px', 'display': 'flex', 'justifyContent': 'space-around'}),
+
+        # 詳細スコアテーブル
+        html.Div([
+            html.H4("詳細スコア"),
+            dash_table.DataTable(
+                data=score_details_df.to_dict('records') if not score_details_df.empty else [],
+                columns=[{'name': col, 'id': col} for col in score_details_df.columns] if not score_details_df.empty else [],
+                style_table={'overflowX': 'auto'},
+                style_cell={'textAlign': 'left', 'padding': '10px'},
+                style_header={'backgroundColor': 'lightgrey', 'fontWeight': 'bold'}
+            )
+        ], style={'marginBottom': '20px'}) if not score_details_df.empty else html.Div(),
+
+        # 勤務カレンダー
+        html.Div([
+            dcc.Graph(figure=heatmap_fig)
+        ], style={'marginBottom': '20px'}),
+
+        # 過不足への影響
+        html.Div([
+            html.Div([
+                dcc.Graph(figure=impact_fig)
+            ], style={'flex': '1'})
+        ], style={'display': 'flex'}),
+
+        # 休暇取得傾向
+        html.Div([
+            dcc.Graph(figure=leave_fig)
+        ], style={'marginBottom': '20px'}),
+
+        # シナジー分析
+        html.Div([
+            html.H4("職員間の「化学反応」分析", style={'marginTop': '20px'}),
+            html.P("シナジースコアは、そのペアが一緒に勤務した際の「人員不足の起こりにくさ」を示します。スコアが高いほど、不足が少なくなる良い組み合わせです。"),
+
+            # 分析タイプ別の追加情報
+            html.Div([
+                html.H5("分析情報"),
+                html.Div([
+                    html.P(f"分析タイプ: {['基本分析（全職員対象）' if synergy_type == 'basic' else '同職種限定分析' if synergy_type == 'same_role' else '全職種詳細分析' if synergy_type == 'all_roles' else '相関マトリックス（全体）'][0]}", style={'fontWeight': 'bold'})
+                ] + ([
+                    html.P(f"全体平均シナジー: {synergy_additional_data['overall_stats']['全体平均シナジー']:.3f}"),
+                    html.P(f"分析対象職員数: {synergy_additional_data['overall_stats']['分析対象職員数']}人"),
+                    html.P(f"対象職種数: {synergy_additional_data['overall_stats']['対象職種数']}職種"),
+                ] if synergy_type == 'all_roles' and synergy_additional_data is not None and 'overall_stats' in synergy_additional_data else []) + ([
+                    html.P(f"分析対象職員数: {synergy_matrix_data['summary']['職員数']}人"),
+                    html.P(f"全体平均シナジー: {synergy_matrix_data['summary']['全体平均シナジー']:.3f}"),
+                ] if synergy_type == 'correlation_matrix' and 'synergy_matrix_data' in locals() and synergy_matrix_data is not None and 'summary' in synergy_matrix_data else []))
+            ], style={'marginBottom': '10px', 'padding': '10px', 'backgroundColor': '#f8f9fa', 'borderRadius': '5px'}) if synergy_type != 'basic' else html.Div(),
+
+            dcc.Graph(figure=synergy_fig),
+
+            # 相関マトリックスの場合、追加情報を表示
+            synergy_additional_info if synergy_type == 'correlation_matrix' and 'synergy_additional_info' in locals() and synergy_additional_info is not None else html.Div()
+        ])
+    ])
+
+    return layout
+
+
 def create_individual_analysis_tab() -> html.Div:
     """
     職員個別分析タブを作成（Pattern A）
@@ -10452,13 +10811,14 @@ def register_interactive_callbacks(app_instance):
 
     @app_instance.callback(
         Output('individual-analysis-content', 'children'),
-        Input('individual-staff-dropdown', 'value'),
+        [Input('individual-staff-dropdown', 'value'),
+         Input('synergy-analysis-type', 'value')],
         [State('session-id', 'data'),
          State('session-metadata', 'data')],
         prevent_initial_call=True
     )
-    def update_individual_content(staff, session_id, metadata):
-        """Individual タブの動的更新 (Phase 2+ エラーハンドリング付き)"""
+    def update_individual_content(staff, synergy_type, session_id, metadata):
+        """Individual タブの動的更新 (Phase 2+ シナジー分析対応)"""
         # Sessionとscenario dirを設定
         session = get_session(session_id)
         if not session:
@@ -10473,9 +10833,13 @@ def register_interactive_callbacks(app_instance):
         if staff is None:
             raise PreventUpdate
 
+        # synergy_typeがNoneの場合はデフォルト値'basic'を使用
+        if synergy_type is None:
+            synergy_type = 'basic'
+
         try:
-            log.info(f"[Individual] Updating: staff={staff}, session={session_id}")
-            return _generate_individual_basic_analysis(staff)
+            log.info(f"[Individual] Updating: staff={staff}, synergy_type={synergy_type}, session={session_id}")
+            return _generate_individual_analysis_with_synergy(staff, synergy_type)
         except Exception as e:
             log.error(f"[Individual] Error for staff={staff}: {str(e)}", exc_info=True)
             return html.Div([
