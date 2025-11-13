@@ -10372,40 +10372,43 @@ def register_interactive_callbacks(app_instance):
     # Team Tab Callbacks
     # ========================================================================
 
-    @app_instance.callback(
-        Output('team-analysis-content', 'children'),
-        [Input('team-criteria-key-dropdown', 'value'),
-         Input('team-criteria-value-dropdown', 'value')],
-        [State('session-id', 'data'),
-         State('session-metadata', 'data')],
-        prevent_initial_call=True
-    )
-    def update_team_content(criteria_key, criteria_value, session_id, metadata):
-        """Team タブの動的更新 (Phase 2+ エラーハンドリング付き)"""
-        # Sessionとscenario dirを設定
-        session = get_session(session_id)
-        if not session:
-            return html.Div("セッションが見つかりません。再度ZIPファイルをアップロードしてください。")
+    # Deploy 20.11.3: team-analysis-content.children は Line 8002 で既に登録済み
+    # 重複登録を防ぐため、ここでは登録しない
 
-        scenario_name = metadata.get("scenario") if metadata else None
-        _, scenario = session.get_scenario_data(scenario_name)
-
-        _set_current_scenario_dir(scenario.root_path)
-        _set_current_session_id(session_id)
-
-        if criteria_key is None or criteria_value is None:
-            raise PreventUpdate
-
-        try:
-            log.info(f"[Team] Updating: key={criteria_key}, value={criteria_value}, session={session_id}")
-            return _generate_team_analysis_content(criteria_key, criteria_value)
-        except Exception as e:
-            log.error(f"[Team] Error for {criteria_key}={criteria_value}: {str(e)}", exc_info=True)
-            return html.Div([
-                html.H4("エラーが発生しました", style={'color': 'red'}),
-                html.P(f"チーム分析「{criteria_key}={criteria_value}」の生成中にエラーが発生しました: {str(e)}"),
-                html.P("他の条件を選択するか、データを確認してください。", style={'color': 'gray'})
-            ], style={'padding': '20px', 'border': '1px solid red', 'borderRadius': '5px'})
+    # @app_instance.callback(
+    #     Output('team-analysis-content', 'children'),
+    #     [Input('team-criteria-key-dropdown', 'value'),
+    #      Input('team-criteria-value-dropdown', 'value')],
+    #     [State('session-id', 'data'),
+    #      State('session-metadata', 'data')],
+    #     prevent_initial_call=True
+    # )
+    # def update_team_content(criteria_key, criteria_value, session_id, metadata):
+    #     """Team タブの動的更新 (Phase 2+ エラーハンドリング付き)"""
+    #     # Sessionとscenario dirを設定
+    #     session = get_session(session_id)
+    #     if not session:
+    #         return html.Div("セッションが見つかりません。再度ZIPファイルをアップロードしてください。")
+    #
+    #     scenario_name = metadata.get("scenario") if metadata else None
+    #     _, scenario = session.get_scenario_data(scenario_name)
+    #
+    #     _set_current_scenario_dir(scenario.root_path)
+    #     _set_current_session_id(session_id)
+    #
+    #     if criteria_key is None or criteria_value is None:
+    #         raise PreventUpdate
+    #
+    #     try:
+    #         log.info(f"[Team] Updating: key={criteria_key}, value={criteria_value}, session={session_id}")
+    #         return _generate_team_analysis_content(criteria_key, criteria_value)
+    #     except Exception as e:
+    #         log.error(f"[Team] Error for {criteria_key}={criteria_value}: {str(e)}", exc_info=True)
+    #         return html.Div([
+    #             html.H4("エラーが発生しました", style={'color': 'red'}),
+    #             html.P(f"チーム分析「{criteria_key}={criteria_value}」の生成中にエラーが発生しました: {str(e)}"),
+    #             html.P("他の条件を選択するか、データを確認してください。", style={'color': 'gray'})
+    #         ], style={'padding': '20px', 'border': '1px solid red', 'borderRadius': '5px'})
 
     # Phase 2+: Team Tab dynamic value selection
     @app_instance.callback(
@@ -10475,15 +10478,18 @@ def register_interactive_callbacks(app_instance):
     # Optimization Tab Callbacks
     # ========================================================================
 
+    # Deploy 20.11.3: opt-detail-container.children は Line 8710 で既に登録済み
+    # 重複登録を防ぐため、ここでは登録しない
+
     # Phase 2+: Optimization Tab dynamic detail filter
-    @app_instance.callback(
-        Output('opt-detail-container', 'children'),
-        Input('opt-scope', 'value'),
-        [State('session-id', 'data'),
-         State('session-metadata', 'data')],
-        prevent_initial_call=True
-    )
-    def update_opt_detail_filter(scope, session_id, metadata):
+    # @app_instance.callback(
+    #     Output('opt-detail-container', 'children'),
+    #     Input('opt-scope', 'value'),
+    #     [State('session-id', 'data'),
+    #      State('session-metadata', 'data')],
+    #     prevent_initial_call=True
+    # )
+    def _update_opt_detail_filter_disabled(scope, session_id, metadata):
         """Optimization Tab: scope変更時に詳細フィルターを動的表示 (Phase 2+ エラーハンドリング付き)
 
         Phase 2+: scope変更時に詳細フィルターを表示/非表示
