@@ -6109,114 +6109,156 @@ def _generate_individual_analysis_with_synergy(selected_staff: str, synergy_type
             )
             leave_fig.update_layout(xaxis={'categoryorder': 'category ascending'})
 
-    # --- 6. シナジー分析（既存ロジック流用） ---
+    # --- 6. シナジー分析（旧callback実装を復元） ---
     synergy_fig = go.Figure(layout={'title': {'text': 'シナジー分析（準備中）'}})
     synergy_additional_data = None
+    synergy_additional_info = html.Div()
+    synergy_matrix_data = None
+    synergy_df = pd.DataFrame()
 
-    if synergy_type == 'basic':
-        synergy_result = analyze_synergy(selected_staff, analysis_type='basic')
-        if synergy_result and not synergy_result.empty:
-            synergy_fig = px.bar(
-                synergy_result,
-                x='other_staff',
-                y='synergy_score',
-                title=f'{selected_staff}さんとの相性（基本分析）',
-                labels={'other_staff': '他の職員', 'synergy_score': 'シナジースコア'},
-                color='synergy_score',
-                color_continuous_scale='RdYlGn'
-            )
-            synergy_fig.update_layout(xaxis={'categoryorder': 'total descending'})
+    # long_dfとshortage_dfを取得
+    long_df = data_get('long_df')
+    shortage_df = data_get('shortage_role_summary')
 
-    elif synergy_type == 'same_role':
-        synergy_result = analyze_synergy(selected_staff, analysis_type='same_role')
-        if synergy_result and not synergy_result.empty:
-            synergy_fig = px.bar(
-                synergy_result,
-                x='other_staff',
-                y='synergy_score',
-                title=f'{selected_staff}さんとの相性（同職種限定）',
-                labels={'other_staff': '他の職員', 'synergy_score': 'シナジースコア'},
-                color='synergy_score',
-                color_continuous_scale='RdYlGn'
-            )
-            synergy_fig.update_layout(xaxis={'categoryorder': 'total descending'})
+    if long_df is None:
+        long_df = pd.DataFrame()
+    if shortage_df is None:
+        shortage_df = pd.DataFrame()
 
-    elif synergy_type == 'all_roles':
-        synergy_result = analyze_synergy(selected_staff, analysis_type='all_roles')
-        if synergy_result and not synergy_result.empty:
-            synergy_fig = px.bar(
-                synergy_result,
-                x='other_staff',
-                y='synergy_score',
-                color='role',
-                title=f'{selected_staff}さんとの相性（全職種）',
-                labels={'other_staff': '他の職員', 'synergy_score': 'シナジースコア', 'role': '職種'},
-                barmode='group'
-            )
-            synergy_fig.update_layout(xaxis={'categoryorder': 'total descending'})
+    log.info(f"[SYNERGY] 分析タイプ: {synergy_type}")
 
-            synergy_additional_data = {
-                'overall_stats': {
-                    '全体平均シナジー': synergy_result['synergy_score'].mean(),
-                    '分析対象職員数': len(synergy_result),
-                    '対象職種数': synergy_result['role'].nunique() if 'role' in synergy_result.columns else 0
-                }
-            }
+    if not long_df.empty:
+        try:
+            if synergy_type == 'correlation_matrix':
+                try:
+                    if create_synergy_correlation_matrix_optimized is not None:
+                        log.info("[SYNERGY] 相関マトリックス分析を実行")
+                        synergy_matrix_data = create_synergy_correlation_matrix_optimized(long_df, shortage_df)
+                        if synergy_matrix_data is not None and 'error' not in synergy_matrix_data:
+                            log.info("[SYNERGY] 相関マトリックス分析完了")
+                        else:
+                            log.error(f"[SYNERGY] 相関マトリックス計算失敗: {synergy_matrix_data.get('error', 'Unknown error') if synergy_matrix_data else 'None result'}")
+                            if synergy_matrix_data is None:
+                                synergy_matrix_data = {"error": "相関マトリックス計算でNone結果"}
+                    else:
+                        log.error("[SYNERGY] 相関マトリックス関数が利用できません")
+                        synergy_matrix_data = {"error": "相関マトリックス関数が利用できません"}
+                except Exception as correlation_error:
+                    log.error(f"[SYNERGY] 相関マトリックス処理でエラー: {correlation_error}")
+                    synergy_matrix_data = {"error": f"相関マトリックス処理エラー: {str(correlation_error)}"}
 
-    elif synergy_type == 'correlation_matrix':
-        synergy_matrix_result = analyze_synergy(selected_staff, analysis_type='correlation_matrix')
-        if synergy_matrix_result and not synergy_matrix_result.empty:
-            synergy_matrix_data = {
-                'matrix': synergy_matrix_result,
-                'summary': {
-                    '職員数': len(synergy_matrix_result),
-                    '全体平均シナジー': synergy_matrix_result.values[synergy_matrix_result.values != 0].mean() if (synergy_matrix_result.values != 0).any() else 0
-                }
-            }
+            elif synergy_type == 'same_role' and analyze_synergy_by_role is not None:
+                log.info("[SYNERGY] 同職種限定シナジー分析を実行")
+                synergy_df = analyze_synergy_by_role(long_df, shortage_df, selected_staff, same_role_only=True)
+                log.info(f"[SYNERGY] 同職種分析結果: {synergy_df.shape}")
+
+            elif synergy_type == 'all_roles' and analyze_all_roles_synergy is not None:
+                log.info("[SYNERGY] 全職種詳細シナジー分析を実行")
+                synergy_additional_data = analyze_all_roles_synergy(long_df, shortage_df, selected_staff)
+                if 'error' not in synergy_additional_data and 'raw_data' in synergy_additional_data:
+                    synergy_df = pd.DataFrame(synergy_additional_data['raw_data'])
+                log.info(f"[SYNERGY] 全職種分析結果: {synergy_df.shape}")
+
+            else:
+                # 基本分析（または関数が利用できない場合のフォールバック）
+                if not shortage_df.empty:
+                    log.info("[SYNERGY] 基本シナジー分析を実行")
+                    synergy_df = analyze_synergy(long_df, shortage_df, selected_staff)
+                    log.info(f"[SYNERGY] 基本分析結果: {synergy_df.shape}")
+
+        except Exception as e:
+            log.error(f"[SYNERGY] 分析エラー: {e}")
+            if synergy_type == 'correlation_matrix':
+                if synergy_matrix_data is None:
+                    synergy_matrix_data = {"error": f"相関マトリックス計算エラー: {str(e)}"}
+            else:
+                # エラーが発生した場合は空のDataFrameに
+                synergy_df = pd.DataFrame()
+
+    # 結果の可視化
+    if synergy_type == 'correlation_matrix':
+        if synergy_matrix_data is not None and 'error' not in synergy_matrix_data:
+            # 相関マトリックスの表示
+            log.info("[SYNERGY] 相関マトリックス表示")
+            matrix_df = pd.DataFrame(synergy_matrix_data['matrix'])
 
             synergy_fig = go.Figure(data=go.Heatmap(
-                z=synergy_matrix_result.values,
-                x=synergy_matrix_result.columns.tolist(),
-                y=synergy_matrix_result.index.tolist(),
-                colorscale='RdYlGn',
-                text=synergy_matrix_result.values,
-                texttemplate='%{text:.2f}',
-                textfont={"size": 8},
-                hovertemplate='職員1: %{y}<br>職員2: %{x}<br>シナジー: %{z:.3f}<extra></extra>'
+                z=matrix_df.values.tolist(),
+                x=matrix_df.columns.tolist(),
+                y=matrix_df.index.tolist(),
+                colorscale='RdBu',
+                zmid=0,
+                text=[[round(v, 2) for v in row] for row in matrix_df.values.tolist()],
+                texttemplate='%{text}',
+                textfont={"size": 10},
+                hoverongaps=False,
+                hovertemplate='%{x} & %{y}<br>シナジースコア: %{z:.3f}<extra></extra>'
             ))
             synergy_fig.update_layout(
-                title=f'職員間シナジーマトリックス（{selected_staff}さん中心）',
-                xaxis_title='職員',
-                yaxis_title='職員',
-                height=800
+                title="全職員間のシナジー相関マトリックス",
+                xaxis_title="職員",
+                yaxis_title="職員",
+                width=1200,
+                height=1000,
+                xaxis={'side': 'bottom', 'tickangle': -45},
+                yaxis={'autorange': 'reversed'},
+                margin=dict(l=150, r=50, t=100, b=150)
             )
 
-            top_pairs = []
-            bottom_pairs = []
-            for i in range(len(synergy_matrix_result)):
-                for j in range(i+1, len(synergy_matrix_result)):
-                    staff1 = synergy_matrix_result.index[i]
-                    staff2 = synergy_matrix_result.columns[j]
-                    score = synergy_matrix_result.iloc[i, j]
-                    if score != 0:
-                        top_pairs.append({'staff1': staff1, 'staff2': staff2, 'score': score})
-                        bottom_pairs.append({'staff1': staff1, 'staff2': staff2, 'score': score})
-
-            top_pairs = sorted(top_pairs, key=lambda x: x['score'], reverse=True)[:5]
-            bottom_pairs = sorted(bottom_pairs, key=lambda x: x['score'])[:5]
-
-            synergy_additional_info = html.Div([
-                html.H5("トップ5の相性ペア", style={'marginTop': '20px'}),
-                html.Ul([
-                    html.Li(f"{pair['staff1']} ⇔ {pair['staff2']}: {pair['score']:.3f}")
-                    for pair in top_pairs
-                ]),
-                html.H5("要注意ペア（相性が低い）", style={'marginTop': '20px'}),
-                html.Ul([
-                    html.Li(f"{pair['staff1']} ⇔ {pair['staff2']}: {pair['score']:.3f}")
-                    for pair in bottom_pairs
+            # ランキング表示
+            ranking_df = pd.DataFrame(synergy_matrix_data.get('ranking', []))
+            if not ranking_df.empty:
+                top5 = ranking_df.head(5)
+                bottom5 = ranking_df.tail(5)
+                synergy_additional_info = html.Div([
+                    html.H5("シナジー平均ランキング"),
+                    html.H6("相性の良い職員 TOP 5", style={'color': 'green'}),
+                    dash_table.DataTable(
+                        data=top5.to_dict('records'),
+                        columns=[{'name': c, 'id': c} for c in top5.columns],
+                        style_cell={'textAlign': 'left'}
+                    ),
+                    html.H6("要改善ペア（相性が低い） BOTTOM 5", style={'color': 'red', 'marginTop': '20px'}),
+                    dash_table.DataTable(
+                        data=bottom5.to_dict('records'),
+                        columns=[{'name': c, 'id': c} for c in bottom5.columns],
+                        style_cell={'textAlign': 'left'}
+                    )
                 ])
-            ])
+        else:
+            error_msg = synergy_matrix_data.get('error', '不明なエラー') if synergy_matrix_data else 'データがありません'
+            synergy_fig.update_layout(title=f"相関マトリックス: {error_msg}")
+
+    else:
+        # basic, same_role, all_rolesの場合
+        if not synergy_df.empty and 'other_staff' in synergy_df.columns and 'synergy_score' in synergy_df.columns:
+            if synergy_type == 'all_roles' and 'role' in synergy_df.columns:
+                synergy_fig = px.bar(
+                    synergy_df,
+                    x='other_staff',
+                    y='synergy_score',
+                    color='role',
+                    title=f'{selected_staff}さんとの相性（全職種）',
+                    labels={'other_staff': '他の職員', 'synergy_score': 'シナジースコア', 'role': '職種'},
+                    barmode='group'
+                )
+                if synergy_additional_data and 'overall_stats' in synergy_additional_data:
+                    synergy_additional_data_display = synergy_additional_data
+            else:
+                title_map = {
+                    'basic': f'{selected_staff}さんとの相性（基本分析）',
+                    'same_role': f'{selected_staff}さんとの相性（同職種限定）'
+                }
+                synergy_fig = px.bar(
+                    synergy_df,
+                    x='other_staff',
+                    y='synergy_score',
+                    title=title_map.get(synergy_type, f'{selected_staff}さんとの相性'),
+                    labels={'other_staff': '他の職員', 'synergy_score': 'シナジースコア'},
+                    color='synergy_score',
+                    color_continuous_scale='RdYlGn'
+                )
+            synergy_fig.update_layout(xaxis={'categoryorder': 'total descending'})
 
     # レイアウトの組み立て
     layout = html.Div([
