@@ -2076,13 +2076,15 @@ def _set_current_session_id(session_id: str | None) -> None:
     """Set the current thread's session ID for cache isolation."""
     _thread_local.CURRENT_SESSION_ID = session_id
 
-# Legacy global variable for backward compatibility (deprecated - use thread-local functions instead)
-CURRENT_SCENARIO_DIR: Path | None = None
+# Phase 1: CURRENT_SCENARIO_DIRグローバル変数を削除（セッション分離のためthread-localのみ使用）
+# Legacy global variable removed - use thread-local functions (_get/_set_current_scenario_dir) instead
+# CURRENT_SCENARIO_DIR: Path | None = None  # Removed in Phase 1
 
 # デフォルトのシナリオディレクトリを自動検出
 def initialize_default_scenario_dir():
-    """デフォルトのシナリオディレクトリを自動検出して設定"""
-    global CURRENT_SCENARIO_DIR
+    """デフォルトのシナリオディレクトリを自動検出して設定（thread-localのみ使用）"""
+    # Phase 1: グローバル変数削除に伴い、global宣言を削除
+    # global CURRENT_SCENARIO_DIR  # Removed in Phase 1
 
     current = _get_current_scenario_dir()
     if current is not None:
@@ -2130,8 +2132,9 @@ def initialize_default_scenario_dir():
                 
                 if any(f.exists() for f in key_files):
                     _set_current_scenario_dir(first_scenario)
-                    CURRENT_SCENARIO_DIR = first_scenario  # Legacy global for backward compatibility
-                    log.info(f"デフォルトシナリオディレクトリを設定: {first_scenario}")
+                    # Phase 1: グローバル変数削除に伴い、代入を削除
+                    # CURRENT_SCENARIO_DIR = first_scenario  # Removed in Phase 1
+                    log.info(f"デフォルトシナリオディレクトリを設定（thread-local）: {first_scenario}")
                     return
     
     # ディレクトリからの読み取りに失敗した場合、zipファイルを自動抽出
@@ -2523,7 +2526,7 @@ def data_get(key: str, default=None, for_display: bool = False):
     log.debug(f"data_get('{key}'): キャッシュミス。ファイル検索を開始... (session_id={session_id}, scenario={scenario_name})")
 
     if current_dir is None:
-        log.warning(f"CURRENT_SCENARIO_DIRが未設定のため、データ取得をスキップします。key={key}")
+        log.warning(f"scenario directoryが未設定のため、データ取得をスキップします。key={key} (session_id={session_id})")
         default_value = default if default is not None else pd.DataFrame()
         DATA_CACHE.set(cache_key, default_value)
         return default_value
