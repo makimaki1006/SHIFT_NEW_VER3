@@ -128,26 +128,56 @@ def generate_proportional_shortage_data(excel_path: str, scenario: str = "median
         log.error(f"按分方式データ生成エラー: {e}")
         return {}
 
-def update_data_cache_with_proportional(data_cache_dict: Dict, excel_path: str, scenario: str = "median"):
+def update_data_cache_with_proportional(
+    data_cache_dict: Dict,
+    excel_path: str,
+    scenario: str = "median",
+    session_id: str = None,
+    scenario_name: str = None
+):
     """
     既存のデータキャッシュを按分方式結果で更新
-    
+
+    Phase 1: セッション固有のキャッシュキーで更新（マルチユーザー対応）
+
     Args:
         data_cache_dict: 既存のデータキャッシュ辞書
         excel_path: Excelファイルパス
         scenario: シナリオ
+        session_id: セッションID（Phase 1で追加）
+        scenario_name: シナリオ名（Phase 1で追加）
     """
     proportional_data = generate_proportional_shortage_data(excel_path, scenario)
-    
+
     if proportional_data:
-        # 按分方式データでキャッシュを更新
-        data_cache_dict.update({
-            'shortage_role_summary': proportional_data['shortage_role_summary'],
-            'shortage_employment_summary': proportional_data['shortage_employment_summary'],
-            'total_shortage_hours': proportional_data['total_shortage_hours'],
-            'proportional_consistency': proportional_data['consistency_check']
-        })
-        
+        # Phase 1: セッション固有のキャッシュキーで更新
+        if session_id and scenario_name:
+            cache_prefix = f"{session_id}_{scenario_name}_"
+            log.info(f"[Phase 1] データキャッシュ更新: session={session_id}, scenario={scenario_name}")
+        elif session_id:
+            cache_prefix = f"{session_id}_"
+            log.info(f"[Phase 1] データキャッシュ更新: session={session_id}")
+        else:
+            # レガシー互換性：セッション情報がない場合
+            cache_prefix = ""
+            log.info(f"データキャッシュ更新（レガシーモード）: {scenario}シナリオ")
+
+        # 按分方式データでキャッシュを更新（セッション固有キー）
+        if hasattr(data_cache_dict, 'set'):
+            # ThreadSafeLRUCacheまたはsmart_cacheの場合
+            data_cache_dict.set(f"{cache_prefix}shortage_role_summary", proportional_data['shortage_role_summary'])
+            data_cache_dict.set(f"{cache_prefix}shortage_employment_summary", proportional_data['shortage_employment_summary'])
+            data_cache_dict.set(f"{cache_prefix}total_shortage_hours", proportional_data['total_shortage_hours'])
+            data_cache_dict.set(f"{cache_prefix}proportional_consistency", proportional_data['consistency_check'])
+        else:
+            # 通常の辞書の場合（レガシー）
+            data_cache_dict.update({
+                f"{cache_prefix}shortage_role_summary": proportional_data['shortage_role_summary'],
+                f"{cache_prefix}shortage_employment_summary": proportional_data['shortage_employment_summary'],
+                f"{cache_prefix}total_shortage_hours": proportional_data['total_shortage_hours'],
+                f"{cache_prefix}proportional_consistency": proportional_data['consistency_check']
+            })
+
         log.info(f"データキャッシュ更新完了: {scenario}シナリオ")
     else:
         log.error("データキャッシュ更新失敗")

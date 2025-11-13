@@ -2038,22 +2038,87 @@ def detect_slot_intervals_from_data(temp_dir_path: Path, scenarios: List[str]) -
         log.error(f"[ダッシュボード] 動的スロット検出エラー: {e}")
         # エラーが発生してもデフォルト値を維持
 
-def get_synergy_cache_key(long_df: pd.DataFrame, shortage_df: pd.DataFrame) -> str:
-    """シナジー分析結果のキャッシュキーを生成"""
+def get_synergy_cache_key(
+    long_df: pd.DataFrame,
+    shortage_df: pd.DataFrame,
+    session_id: Optional[str] = None,
+    scenario_name: Optional[str] = None
+) -> str:
+    """
+    シナジー分析結果のキャッシュキーを生成
+
+    Phase 1: セッション情報を含むキャッシュキーで他セッションとの衝突を防ぐ
+
+    Args:
+        long_df: 勤務データ
+        shortage_df: 不足時間データ
+        session_id: セッションID（Phase 1で追加）
+        scenario_name: シナリオ名（Phase 1で追加）
+
+    Returns:
+        セッション固有のキャッシュキー
+    """
     try:
         # データのハッシュ値を計算してキャッシュキーとする
         import hashlib
         long_hash = hashlib.md5(str(long_df.shape).encode() + str(long_df.columns.tolist()).encode()).hexdigest()[:8]
         shortage_hash = hashlib.md5(str(shortage_df.shape).encode() + str(shortage_df.columns.tolist()).encode()).hexdigest()[:8]
-        return f"synergy_{long_hash}_{shortage_hash}"
+
+        # Phase 1: セッション情報をキーに含める
+        if session_id and scenario_name:
+            return f"{session_id}_{scenario_name}_synergy_{long_hash}_{shortage_hash}"
+        elif session_id:
+            return f"{session_id}_synergy_{long_hash}_{shortage_hash}"
+        else:
+            # レガシー互換性：セッション情報がない場合
+            return f"synergy_{long_hash}_{shortage_hash}"
     except:
+        if session_id:
+            return f"{session_id}_synergy_default"
         return "synergy_default"
 
-def clear_synergy_cache():
-    """シナジーキャッシュをクリア"""
+def clear_synergy_cache(session_id: Optional[str] = None, scenario_name: Optional[str] = None) -> None:
+    """
+    シナジーキャッシュをクリア
+
+    Phase 1: セッション固有のキャッシュのみクリア（マルチユーザー対応）
+
+    Args:
+        session_id: セッションID。指定された場合、そのセッションのキャッシュのみクリア
+        scenario_name: シナリオ名。session_idと合わせて指定された場合、特定シナリオのみクリア
+    """
     global SYNERGY_CACHE
-    SYNERGY_CACHE.clear()
-    log.info("シナジーキャッシュをクリアしました")
+
+    if session_id:
+        # Phase 1: セッション固有のキャッシュのみクリア
+        if scenario_name:
+            prefix = f"{session_id}_{scenario_name}_synergy_"
+            log.info(f"[Phase 1] Clearing synergy cache for session {session_id}, scenario {scenario_name}")
+        else:
+            prefix = f"{session_id}_synergy_"
+            log.info(f"[Phase 1] Clearing synergy cache for session {session_id}")
+
+        # セッション固有のキーのみクリア
+        keys_to_remove = []
+        if hasattr(SYNERGY_CACHE, 'keys'):
+            for key in list(SYNERGY_CACHE.keys()):
+                if str(key).startswith(prefix):
+                    keys_to_remove.append(key)
+
+        for key in keys_to_remove:
+            try:
+                if hasattr(SYNERGY_CACHE, 'delete'):
+                    SYNERGY_CACHE.delete(key)
+                elif hasattr(SYNERGY_CACHE, 'pop'):
+                    SYNERGY_CACHE.pop(key, None)
+            except Exception as e:
+                log.warning(f"Failed to remove synergy cache key {key}: {e}")
+
+        log.info(f"[Phase 1] Removed {len(keys_to_remove)} synergy cache entries for session")
+    else:
+        # 従来の動作：全キャッシュクリア（レガシー互換性のため残す）
+        SYNERGY_CACHE.clear()
+        log.info("シナジーキャッシュをクリアしました（全クリア）")
 LOADING_STATUS = {}  # 読み込み中のキーを追跡
 LOADING_LOCK = threading.Lock()
 
@@ -2356,18 +2421,54 @@ def safe_read_csv(filepath: Path) -> pd.DataFrame:
         return pd.DataFrame()
 
 
-def clear_data_cache() -> None:
-    """Clear cached data when the scenario changes with resource monitoring."""
+def clear_data_cache(session_id: Optional[str] = None, scenario_name: Optional[str] = None) -> None:
+    """
+    Clear cached data when the scenario changes with resource monitoring.
+
+    Phase 1: セッション固有のキャッシュのみクリア（マルチユーザー対応）
+
+    Args:
+        session_id: セッションID。指定された場合、そのセッションのキャッシュのみクリア
+        scenario_name: シナリオ名。session_idと合わせて指定された場合、特定シナリオのみクリア
+    """
     memory_before = get_memory_usage()
-    log.info(f"Data cache clear started. Memory before: {memory_before['rss_mb']:.1f}MB")
-    
-    DATA_CACHE.clear()
-    safe_read_parquet.cache_clear()
-    safe_read_csv.cache_clear()
-    
+
+    if session_id:
+        # Phase 1: セッション固有のキャッシュのみクリア
+        if scenario_name:
+            prefix = f"{session_id}_{scenario_name}_"
+            log.info(f"[Phase 1] Clearing cache for session {session_id}, scenario {scenario_name}")
+        else:
+            prefix = f"{session_id}_"
+            log.info(f"[Phase 1] Clearing cache for session {session_id}")
+
+        # セッション固有のキーのみクリア
+        keys_to_remove = []
+        if hasattr(DATA_CACHE, 'keys'):
+            for key in list(DATA_CACHE.keys()):
+                if str(key).startswith(prefix):
+                    keys_to_remove.append(key)
+
+        for key in keys_to_remove:
+            try:
+                if hasattr(DATA_CACHE, 'delete'):
+                    DATA_CACHE.delete(key)
+                elif hasattr(DATA_CACHE, 'pop'):
+                    DATA_CACHE.pop(key, None)
+            except Exception as e:
+                log.warning(f"Failed to remove cache key {key}: {e}")
+
+        log.info(f"[Phase 1] Removed {len(keys_to_remove)} cache entries for session")
+    else:
+        # 従来の動作：全キャッシュクリア（レガシー互換性のため残す）
+        log.info(f"Data cache clear started (全クリア). Memory before: {memory_before['rss_mb']:.1f}MB")
+        DATA_CACHE.clear()
+        safe_read_parquet.cache_clear()
+        safe_read_csv.cache_clear()
+
     # 積極的なガベージコレクション
     gc.collect()
-    
+
     memory_after = get_memory_usage()
     memory_freed = memory_before['rss_mb'] - memory_after['rss_mb']
     log.info(f"Data cache cleared. Memory after: {memory_after['rss_mb']:.1f}MB (freed: {memory_freed:.1f}MB)")
@@ -8054,7 +8155,9 @@ def update_main_content(selected_scenario, data_status, session_id, metadata):
 
     # Scenario has changed; reset caches and store new directory
     _set_current_scenario_dir(data_dir)
-    clear_data_cache()
+
+    # Phase 1: セッション固有のキャッシュのみクリア（マルチユーザー対応）
+    clear_data_cache(session_id=session_id, scenario_name=selected_scenario)
 
     # 按分方式データ生成・キャッシュ更新
     excel_path = None
@@ -8062,21 +8165,28 @@ def update_main_content(selected_scenario, data_status, session_id, metadata):
         if "テスト用データ" in excel_file.name:
             excel_path = str(excel_file)
             break
-    
+
     if excel_path:
         try:
             log.info(f"按分方式データキャッシュ更新開始: {selected_scenario}")
-            
+
             # 分析処理開始の監視
             if processing_monitor:
                 start_processing()
                 start_step("preprocessing", "データ前処理を実行中...")
-            
+
             # パフォーマンス測定開始
             if performance_monitor:
                 performance_monitor.start_timing("data_preprocessing")
-            
-            update_data_cache_with_proportional(DATA_CACHE, excel_path, selected_scenario)
+
+            # Phase 1: セッション固有のキャッシュキーで更新（マルチユーザー対応）
+            update_data_cache_with_proportional(
+                DATA_CACHE,
+                excel_path,
+                selected_scenario,
+                session_id=session_id,
+                scenario_name=selected_scenario
+            )
             log.info("按分方式データキャッシュ更新完了")
             
             if processing_monitor:
