@@ -2229,8 +2229,6 @@ def initialize_default_scenario_dir():
 
 # 初期化実行
 initialize_default_scenario_dir()
-# Temporary directory object for uploaded scenarios
-TEMP_DIR_OBJ: tempfile.TemporaryDirectory | None = None
 
 # ``LOGIC_ANALYSIS_CACHE`` stores results keyed by dataframe hash
 LOGIC_ANALYSIS_CACHE: dict[int, dict[str, object]] = {}
@@ -7888,8 +7886,6 @@ def process_upload(contents, filename):
     if contents is None:
         raise PreventUpdate
 
-    global TEMP_DIR_OBJ
-    
     log.info(f"[データ入稿] ファイル受信: {filename}")
     
     # 進捗監視開始
@@ -7953,11 +7949,6 @@ def process_upload(contents, filename):
                 update_progress("extraction", 50, "SessionData作成中...")
 
             try:
-                # グローバルTEMP_DIR_OBJをクリーンアップ（新しいSessionData.temp_dirを使用するため）
-                if TEMP_DIR_OBJ:
-                    TEMP_DIR_OBJ.cleanup()
-                    TEMP_DIR_OBJ = None
-
                 # SessionDataを作成（内部でZIP展開、シナリオ検出、スロット検出を実行）
                 session = load_session_data_from_zip(contents, filename)
 
@@ -8023,11 +8014,6 @@ def process_upload(contents, filename):
             session_temp_dir = tempfile.TemporaryDirectory(prefix="shift_suite_dash_single_")
             temp_dir_path = Path(session_temp_dir.name)
             log.info(f"[データ入稿] セッション専用一時ディレクトリ作成: {temp_dir_path}")
-
-            # 後方互換性のためグローバルTEMP_DIR_OBJも更新（将来削除予定）
-            if TEMP_DIR_OBJ:
-                TEMP_DIR_OBJ.cleanup()
-            TEMP_DIR_OBJ = session_temp_dir
 
             content_type, content_string = contents.split(',')
             decoded = base64.b64decode(content_string)
