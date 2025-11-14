@@ -2141,6 +2141,24 @@ def _set_current_session_id(session_id: str | None) -> None:
     """Set the current thread's session ID for cache isolation."""
     _thread_local.CURRENT_SESSION_ID = session_id
 
+def _get_current_slot_info() -> Dict[str, Any]:
+    """Get the current thread's slot information."""
+    return getattr(_thread_local, 'SLOT_INFO', {
+        'slot_minutes': 30,
+        'slot_hours': 0.5,
+        'confidence': 1.0,
+        'auto_detected': False
+    })
+
+def _set_current_slot_info(slot_info: Dict[str, Any]) -> None:
+    """Set the current thread's slot information."""
+    _thread_local.SLOT_INFO = slot_info.copy() if slot_info else {
+        'slot_minutes': 30,
+        'slot_hours': 0.5,
+        'confidence': 1.0,
+        'auto_detected': False
+    }
+
 # Phase 1: CURRENT_SCENARIO_DIRグローバル変数を削除（セッション分離のためthread-localのみ使用）
 # Legacy global variable removed - use thread-local functions (_get/_set_current_scenario_dir) instead
 # CURRENT_SCENARIO_DIR: Path | None = None  # Removed in Phase 1
@@ -3073,7 +3091,7 @@ def generate_heatmap_figure(df_heat: pd.DataFrame, title: str, device_type: str 
     original_rows = len(display_df)
     
     # 動的スロット間隔を使用してラベル生成
-    slot_minutes = DETECTED_SLOT_INFO['slot_minutes']
+    slot_minutes = _get_current_slot_info()['slot_minutes']  # Phase 1: Deploy 20.17
     time_labels = gen_labels(slot_minutes)
     display_df = display_df.reindex(time_labels, fill_value=0)
     
@@ -3197,8 +3215,8 @@ def generate_heatmap_figure(df_heat: pd.DataFrame, title: str, device_type: str 
     
     # スロット間隔に応じた最適化
     confidence_info = ""
-    if DETECTED_SLOT_INFO['auto_detected']:
-        confidence_info = f" (検出スロット: {slot_minutes}分, 信頼度: {DETECTED_SLOT_INFO['confidence']:.2f})"
+    if _get_current_slot_info()['auto_detected']:  # Phase 1: Deploy 20.17
+        confidence_info = f" (検出スロット: {slot_minutes}分, 信頼度: {_get_current_slot_info()['confidence']:.2f})"  # Phase 1: Deploy 20.17
     
     fig.update_layout(
         height=600,
@@ -3742,9 +3760,9 @@ def create_overview_tab(selected_scenario: str = None) -> html.Div:
                 html.P([
                     "• ", html.Strong("統計手法: "), "中央値ベース（外れ値に強い安定した代表値）",
                     html.Br(),
-                    "• ", html.Strong("時間軸ベース分析: "), f"{DETECTED_SLOT_INFO['slot_minutes']}分スロット単位での真の過不足分析による職種別・雇用形態別算出",
+                    "• ", html.Strong("時間軸ベース分析: "), f"{_get_current_slot_info()['slot_minutes']}分スロット単位での真の過不足分析による職種別・雇用形態別算出",  # Phase 1: Deploy 20.17
                     html.Br(),
-                    "• ", html.Strong("スロット変換: "), f"1スロット = {DETECTED_SLOT_INFO['slot_hours']:.2f}時間（{DETECTED_SLOT_INFO['slot_minutes']}分間隔）",
+                    "• ", html.Strong("スロット変換: "), f"1スロット = {_get_current_slot_info()['slot_hours']:.2f}時間（{_get_current_slot_info()['slot_minutes']}分間隔）",  # Phase 1: Deploy 20.17
                     html.Br(),
                     "• ", html.Strong("異常値検出: "), "10,000スロット（5,000時間）超過時に1/10調整"
                 ], style={'lineHeight': '1.6'}),
@@ -3831,7 +3849,7 @@ def _generate_static_heatmap(selected_role: str, selected_emp: str) -> dcc.Graph
 
     # 3. 空データの場合の処理
     if filtered_df.empty:
-        time_labels = gen_labels(DETECTED_SLOT_INFO['slot_minutes'])
+        time_labels = gen_labels(_get_current_slot_info()['slot_minutes'])  # Phase 1: Deploy 20.17
         try:
             meta_data = data_get('heatmap_meta', {})
             if 'dates' in meta_data and meta_data['dates']:
@@ -3883,7 +3901,7 @@ def _generate_static_heatmap(selected_role: str, selected_emp: str) -> dcc.Graph
     dynamic_heatmap_df = optimize_heatmap_data(dynamic_heatmap_df, max_days=60)
 
     # 8. 時間軸のreindex
-    time_labels = gen_labels(DETECTED_SLOT_INFO['slot_minutes'])
+    time_labels = gen_labels(_get_current_slot_info()['slot_minutes'])  # Phase 1: Deploy 20.17
     dynamic_heatmap_df = dynamic_heatmap_df.reindex(index=time_labels, fill_value=0)
 
     # 9. 図の生成
@@ -8863,7 +8881,7 @@ def update_employment_options(*args):
 #         title = " AND ".join(title_parts) if title_parts else "全体"
 # 
 #         if filtered_df.empty:
-#             time_labels = gen_labels(DETECTED_SLOT_INFO['slot_minutes'])
+#             time_labels = gen_labels(_get_current_slot_info()['slot_minutes'])  # Phase 1: Deploy 20.17
             # 空の場合も全期間の日付を確実に取得
 #             try:
 #                 meta_data = data_get('heatmap_meta', {})
@@ -8923,7 +8941,7 @@ def update_employment_options(*args):
         # ヒートマップデータ最適化を適用
 #         dynamic_heatmap_df = optimize_heatmap_data(dynamic_heatmap_df, max_days=60)
 # 
-#         time_labels = gen_labels(DETECTED_SLOT_INFO['slot_minutes'])
+#         time_labels = gen_labels(_get_current_slot_info()['slot_minutes'])  # Phase 1: Deploy 20.17
 #         
         # 次にインデックス（時間）を全て網羅するようにreindexし、不足している行は0で埋める
 #         dynamic_heatmap_df = dynamic_heatmap_df.reindex(index=time_labels, fill_value=0)
@@ -9264,7 +9282,7 @@ def register_shortage_callbacks(app_instance):
             log.info(f"Adjusted to common dimensions: {need_df.shape}")
     
         # 正しい時間軸を使用してデータを整形
-        time_labels = gen_labels(DETECTED_SLOT_INFO['slot_minutes'])
+        time_labels = gen_labels(_get_current_slot_info()['slot_minutes'])  # Phase 1: Deploy 20.17
     
         # 時間軸をreindexして24時間分確保
         need_df = need_df.reindex(index=time_labels, fill_value=0)
@@ -9311,7 +9329,7 @@ def register_shortage_callbacks(app_instance):
         fig_lack.update_xaxes(tickvals=list(range(len(lack_count_df.columns))))
     
         # Y軸（時間軸）の明示的な設定を追加 - 24時間表示対応
-        time_labels = gen_labels(DETECTED_SLOT_INFO['slot_minutes'])
+        time_labels = gen_labels(_get_current_slot_info()['slot_minutes'])  # Phase 1: Deploy 20.17
         fig_lack.update_yaxes(
             tickvals=list(range(len(time_labels))),
             ticktext=time_labels,
@@ -10637,14 +10655,16 @@ def page_overview(session: SessionData, metadata: Optional[dict]) -> html.Div:
     _, scenario = session.get_scenario_data(scenario_name)
     old_dir = _get_current_scenario_dir()
     old_session_id = _get_current_session_id()
+    old_slot_info = _get_current_slot_info()  # Phase 1: Deploy 20.17
     _set_current_scenario_dir(scenario.root_path)
     _set_current_session_id(session_id)
+    _set_current_slot_info(session.slot_info)  # Phase 1: Deploy 20.17
     try:
         return create_overview_tab(scenario_name)
     finally:
         _set_current_scenario_dir(old_dir)
         _set_current_session_id(old_session_id)
-        _set_current_session_id(old_session_id)
+        _set_current_slot_info(old_slot_info)  # Phase 1: Deploy 20.17
 
 
 def page_heatmap(session: SessionData, metadata: Optional[dict]) -> html.Div:
@@ -10656,13 +10676,16 @@ def page_heatmap(session: SessionData, metadata: Optional[dict]) -> html.Div:
     print(f"DEBUG [page_heatmap]: scenario.root_path={scenario.root_path}")
     old_dir = _get_current_scenario_dir()
     old_session_id = _get_current_session_id()
+    old_slot_info = _get_current_slot_info()  # Phase 1: Deploy 20.17
     _set_current_scenario_dir(scenario.root_path)
     _set_current_session_id(session_id)
+    _set_current_slot_info(session.slot_info)  # Phase 1: Deploy 20.17
     try:
         return create_heatmap_tab()
     finally:
         _set_current_scenario_dir(old_dir)
         _set_current_session_id(old_session_id)
+        _set_current_slot_info(old_slot_info)  # Phase 1: Deploy 20.17
 
 
 def page_shortage(session: SessionData, metadata: Optional[dict]) -> html.Div:
@@ -10672,13 +10695,16 @@ def page_shortage(session: SessionData, metadata: Optional[dict]) -> html.Div:
     _, scenario = session.get_scenario_data(scenario_name)
     old_dir = _get_current_scenario_dir()
     old_session_id = _get_current_session_id()
+    old_slot_info = _get_current_slot_info()  # Phase 1: Deploy 20.17
     _set_current_scenario_dir(scenario.root_path)
     _set_current_session_id(session_id)
+    _set_current_slot_info(session.slot_info)  # Phase 1: Deploy 20.17
     try:
         return create_shortage_tab(scenario_name)
     finally:
         _set_current_scenario_dir(old_dir)
         _set_current_session_id(old_session_id)
+        _set_current_slot_info(old_slot_info)  # Phase 1: Deploy 20.17
 
 
 def page_individual(session: SessionData, metadata: Optional[dict]) -> html.Div:
@@ -10688,13 +10714,16 @@ def page_individual(session: SessionData, metadata: Optional[dict]) -> html.Div:
     _, scenario = session.get_scenario_data(scenario_name)
     old_dir = _get_current_scenario_dir()
     old_session_id = _get_current_session_id()
+    old_slot_info = _get_current_slot_info()  # Phase 1: Deploy 20.17
     _set_current_scenario_dir(scenario.root_path)
     _set_current_session_id(session_id)
+    _set_current_slot_info(session.slot_info)  # Phase 1: Deploy 20.17
     try:
         return create_individual_analysis_tab()
     finally:
         _set_current_scenario_dir(old_dir)
         _set_current_session_id(old_session_id)
+        _set_current_slot_info(old_slot_info)  # Phase 1: Deploy 20.17
 
 
 def page_team(session: SessionData, metadata: Optional[dict]) -> html.Div:
@@ -10704,13 +10733,16 @@ def page_team(session: SessionData, metadata: Optional[dict]) -> html.Div:
     _, scenario = session.get_scenario_data(scenario_name)
     old_dir = _get_current_scenario_dir()
     old_session_id = _get_current_session_id()
+    old_slot_info = _get_current_slot_info()  # Phase 1: Deploy 20.17
     _set_current_scenario_dir(scenario.root_path)
     _set_current_session_id(session_id)
+    _set_current_slot_info(session.slot_info)  # Phase 1: Deploy 20.17
     try:
         return create_team_analysis_tab()
     finally:
         _set_current_scenario_dir(old_dir)
         _set_current_session_id(old_session_id)
+        _set_current_slot_info(old_slot_info)  # Phase 1: Deploy 20.17
 
 
 def page_fatigue(session: SessionData, metadata: Optional[dict]) -> html.Div:
@@ -10720,13 +10752,16 @@ def page_fatigue(session: SessionData, metadata: Optional[dict]) -> html.Div:
     _, scenario = session.get_scenario_data(scenario_name)
     old_dir = _get_current_scenario_dir()
     old_session_id = _get_current_session_id()
+    old_slot_info = _get_current_slot_info()  # Phase 1: Deploy 20.17
     _set_current_scenario_dir(scenario.root_path)
     _set_current_session_id(session_id)
+    _set_current_slot_info(session.slot_info)  # Phase 1: Deploy 20.17
     try:
         return create_fatigue_tab()
     finally:
         _set_current_scenario_dir(old_dir)
         _set_current_session_id(old_session_id)
+        _set_current_slot_info(old_slot_info)  # Phase 1: Deploy 20.17
 
 
 def page_leave(session: SessionData, metadata: Optional[dict]) -> html.Div:
@@ -10736,13 +10771,16 @@ def page_leave(session: SessionData, metadata: Optional[dict]) -> html.Div:
     _, scenario = session.get_scenario_data(scenario_name)
     old_dir = _get_current_scenario_dir()
     old_session_id = _get_current_session_id()
+    old_slot_info = _get_current_slot_info()  # Phase 1: Deploy 20.17
     _set_current_scenario_dir(scenario.root_path)
     _set_current_session_id(session_id)
+    _set_current_slot_info(session.slot_info)  # Phase 1: Deploy 20.17
     try:
         return create_leave_analysis_tab()
     finally:
         _set_current_scenario_dir(old_dir)
         _set_current_session_id(old_session_id)
+        _set_current_slot_info(old_slot_info)  # Phase 1: Deploy 20.17
 
 
 def page_fairness(session: SessionData, metadata: Optional[dict]) -> html.Div:
@@ -10752,13 +10790,16 @@ def page_fairness(session: SessionData, metadata: Optional[dict]) -> html.Div:
     _, scenario = session.get_scenario_data(scenario_name)
     old_dir = _get_current_scenario_dir()
     old_session_id = _get_current_session_id()
+    old_slot_info = _get_current_slot_info()  # Phase 1: Deploy 20.17
     _set_current_scenario_dir(scenario.root_path)
     _set_current_session_id(session_id)
+    _set_current_slot_info(session.slot_info)  # Phase 1: Deploy 20.17
     try:
         return create_fairness_tab()
     finally:
         _set_current_scenario_dir(old_dir)
         _set_current_session_id(old_session_id)
+        _set_current_slot_info(old_slot_info)  # Phase 1: Deploy 20.17
 
 
 def page_optimization(session: SessionData, metadata: Optional[dict]) -> html.Div:
@@ -10768,13 +10809,16 @@ def page_optimization(session: SessionData, metadata: Optional[dict]) -> html.Di
     _, scenario = session.get_scenario_data(scenario_name)
     old_dir = _get_current_scenario_dir()
     old_session_id = _get_current_session_id()
+    old_slot_info = _get_current_slot_info()  # Phase 1: Deploy 20.17
     _set_current_scenario_dir(scenario.root_path)
     _set_current_session_id(session_id)
+    _set_current_slot_info(session.slot_info)  # Phase 1: Deploy 20.17
     try:
         return create_optimization_tab()
     finally:
         _set_current_scenario_dir(old_dir)
         _set_current_session_id(old_session_id)
+        _set_current_slot_info(old_slot_info)  # Phase 1: Deploy 20.17
 
 
 def page_forecast(session: SessionData, metadata: Optional[dict]) -> html.Div:
@@ -10784,13 +10828,16 @@ def page_forecast(session: SessionData, metadata: Optional[dict]) -> html.Div:
     _, scenario = session.get_scenario_data(scenario_name)
     old_dir = _get_current_scenario_dir()
     old_session_id = _get_current_session_id()
+    old_slot_info = _get_current_slot_info()  # Phase 1: Deploy 20.17
     _set_current_scenario_dir(scenario.root_path)
     _set_current_session_id(session_id)
+    _set_current_slot_info(session.slot_info)  # Phase 1: Deploy 20.17
     try:
         return create_forecast_tab()
     finally:
         _set_current_scenario_dir(old_dir)
         _set_current_session_id(old_session_id)
+        _set_current_slot_info(old_slot_info)  # Phase 1: Deploy 20.17
 
 
 def page_hire_plan(session: SessionData, metadata: Optional[dict]) -> html.Div:
@@ -10800,13 +10847,16 @@ def page_hire_plan(session: SessionData, metadata: Optional[dict]) -> html.Div:
     _, scenario = session.get_scenario_data(scenario_name)
     old_dir = _get_current_scenario_dir()
     old_session_id = _get_current_session_id()
+    old_slot_info = _get_current_slot_info()  # Phase 1: Deploy 20.17
     _set_current_scenario_dir(scenario.root_path)
     _set_current_session_id(session_id)
+    _set_current_slot_info(session.slot_info)  # Phase 1: Deploy 20.17
     try:
         return create_hire_plan_tab()
     finally:
         _set_current_scenario_dir(old_dir)
         _set_current_session_id(old_session_id)
+        _set_current_slot_info(old_slot_info)  # Phase 1: Deploy 20.17
 
 
 def page_cost(session: SessionData, metadata: Optional[dict]) -> html.Div:
@@ -10816,13 +10866,16 @@ def page_cost(session: SessionData, metadata: Optional[dict]) -> html.Div:
     _, scenario = session.get_scenario_data(scenario_name)
     old_dir = _get_current_scenario_dir()
     old_session_id = _get_current_session_id()
+    old_slot_info = _get_current_slot_info()  # Phase 1: Deploy 20.17
     _set_current_scenario_dir(scenario.root_path)
     _set_current_session_id(session_id)
+    _set_current_slot_info(session.slot_info)  # Phase 1: Deploy 20.17
     try:
         return create_cost_analysis_tab()
     finally:
         _set_current_scenario_dir(old_dir)
         _set_current_session_id(old_session_id)
+        _set_current_slot_info(old_slot_info)  # Phase 1: Deploy 20.17
 
 
 def page_gap_analysis(session: SessionData, metadata: Optional[dict]) -> html.Div:
@@ -10832,13 +10885,16 @@ def page_gap_analysis(session: SessionData, metadata: Optional[dict]) -> html.Di
     _, scenario = session.get_scenario_data(scenario_name)
     old_dir = _get_current_scenario_dir()
     old_session_id = _get_current_session_id()
+    old_slot_info = _get_current_slot_info()  # Phase 1: Deploy 20.17
     _set_current_scenario_dir(scenario.root_path)
     _set_current_session_id(session_id)
+    _set_current_slot_info(session.slot_info)  # Phase 1: Deploy 20.17
     try:
         return create_gap_analysis_tab()
     finally:
         _set_current_scenario_dir(old_dir)
         _set_current_session_id(old_session_id)
+        _set_current_slot_info(old_slot_info)  # Phase 1: Deploy 20.17
 
 
 def page_blueprint(session: SessionData, metadata: Optional[dict]) -> html.Div:
@@ -10848,13 +10904,16 @@ def page_blueprint(session: SessionData, metadata: Optional[dict]) -> html.Div:
     _, scenario = session.get_scenario_data(scenario_name)
     old_dir = _get_current_scenario_dir()
     old_session_id = _get_current_session_id()
+    old_slot_info = _get_current_slot_info()  # Phase 1: Deploy 20.17
     _set_current_scenario_dir(scenario.root_path)
     _set_current_session_id(session_id)
+    _set_current_slot_info(session.slot_info)  # Phase 1: Deploy 20.17
     try:
         return create_blueprint_analysis_tab()
     finally:
         _set_current_scenario_dir(old_dir)
         _set_current_session_id(old_session_id)
+        _set_current_slot_info(old_slot_info)  # Phase 1: Deploy 20.17
 
 
 def page_logic(session: SessionData, metadata: Optional[dict]) -> html.Div:
@@ -10864,13 +10923,16 @@ def page_logic(session: SessionData, metadata: Optional[dict]) -> html.Div:
     _, scenario = session.get_scenario_data(scenario_name)
     old_dir = _get_current_scenario_dir()
     old_session_id = _get_current_session_id()
+    old_slot_info = _get_current_slot_info()  # Phase 1: Deploy 20.17
     _set_current_scenario_dir(scenario.root_path)
     _set_current_session_id(session_id)
+    _set_current_slot_info(session.slot_info)  # Phase 1: Deploy 20.17
     try:
         return create_ai_analysis_tab()
     finally:
         _set_current_scenario_dir(old_dir)
         _set_current_session_id(old_session_id)
+        _set_current_slot_info(old_slot_info)  # Phase 1: Deploy 20.17
 
 
 def page_mind_reader(session: SessionData, metadata: Optional[dict]) -> html.Div:
@@ -10880,13 +10942,16 @@ def page_mind_reader(session: SessionData, metadata: Optional[dict]) -> html.Div
     _, scenario = session.get_scenario_data(scenario_name)
     old_dir = _get_current_scenario_dir()
     old_session_id = _get_current_session_id()
+    old_slot_info = _get_current_slot_info()  # Phase 1: Deploy 20.17
     _set_current_scenario_dir(scenario.root_path)
     _set_current_session_id(session_id)
+    _set_current_slot_info(session.slot_info)  # Phase 1: Deploy 20.17
     try:
         return create_ai_analysis_tab()
     finally:
         _set_current_scenario_dir(old_dir)
         _set_current_session_id(old_session_id)
+        _set_current_slot_info(old_slot_info)  # Phase 1: Deploy 20.17
 
 
 def page_summary(session: SessionData, metadata: Optional[dict]) -> html.Div:
@@ -10896,8 +10961,10 @@ def page_summary(session: SessionData, metadata: Optional[dict]) -> html.Div:
     _, scenario = session.get_scenario_data(scenario_name)
     old_dir = _get_current_scenario_dir()
     old_session_id = _get_current_session_id()
+    old_slot_info = _get_current_slot_info()  # Phase 1: Deploy 20.17
     _set_current_scenario_dir(scenario.root_path)
     _set_current_session_id(session_id)
+    _set_current_slot_info(session.slot_info)  # Phase 1: Deploy 20.17
     try:
         return create_summary_report_tab()
     finally:
@@ -10919,6 +10986,7 @@ def page_reports(session: SessionData, metadata: Optional[dict]) -> html.Div:
     finally:
         _set_current_scenario_dir(old_dir)
         _set_current_session_id(old_session_id)
+        _set_current_slot_info(old_slot_info)  # Phase 1: Deploy 20.17
 
 
 # ============================================================================
