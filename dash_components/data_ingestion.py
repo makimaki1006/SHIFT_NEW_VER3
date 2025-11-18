@@ -43,7 +43,7 @@ class DataIngestionFlow:
             
             # アップロードエリア
             dcc.Upload(
-                id='upload-data',
+                id='zip-uploader',
                 children=html.Div([
                     html.Div([
                         html.I(className="fas fa-cloud-upload-alt", 

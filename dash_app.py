@@ -35,6 +35,7 @@ from dash import dash_table, dcc, html
 from dash.dependencies import Input, Output, State, ALL
 from dash.exceptions import PreventUpdate
 from flask import jsonify
+from urllib.parse import parse_qsl
 import traceback
 import gc
 from shift_suite.tasks.utils import safe_read_excel, gen_labels, _valid_df
@@ -51,12 +52,14 @@ from shift_suite.tasks.advanced_blueprint_engine_v2 import AdvancedBlueprintEngi
 log = logging.getLogger(__name__)
 
 # 新しいデータフロー専用モジュール
-try:
-    from dash_components.data_ingestion import data_ingestion
-    log.info("データ入稿モジュールを正常に読み込みました")
-except ImportError as e:
-    log.warning(f"データ入稿モジュールの読み込みに失敗: {e}")
-    data_ingestion = None
+# TEMPORARY: Disable data_ingestion to test fallback UI with Playwright
+# try:
+#     from dash_components.data_ingestion import data_ingestion
+#     log.info("データ入稿モジュールを正常に読み込みました")
+# except ImportError as e:
+#     log.warning(f"データ入稿モジュールの読み込みに失敗: {e}")
+data_ingestion = None
+log.info("[DEBUG] data_ingestion強制無効化 - フォールバックUI使用")
 
 try:
     from dash_components.processing_monitor import processing_monitor, start_processing, start_step, update_progress, complete_step, fail_step
@@ -1824,6 +1827,100 @@ app.index_string = '''
             {%config%}
             {%scripts%}
             {%renderer%}
+            <script>
+            // Phase 1: Test minimal script
+            console.log('[Phase 1 Test] Script loaded');
+            const urlParams = new URLSearchParams(window.location.search);
+            const sessionId = urlParams.get('session_id');
+            console.log('[Phase 1 Test] session_id:', sessionId);
+            </script>
+            <script>
+            (function() {
+                function executeSessionRestore() {
+                    setTimeout(function() {
+                        console.log('[Phase 1 Direct API] Script executing...');
+                        const urlParams = new URLSearchParams(window.location.search);
+                        const sessionId = urlParams.get('session_id');
+
+                        if (sessionId) {
+                            console.log('[Phase 1 Direct API] Found session_id in URL:', sessionId);
+
+                            // sessionStorageに保存（dcc.Store用）
+                            sessionStorage.setItem('dash-storage-session-id', JSON.stringify(sessionId));
+                            const dataLoaded = {
+                                success: true,
+                                restored: true,
+                                timestamp: Date.now(),
+                                source: 'url_parameter_direct'
+                            };
+                            sessionStorage.setItem('dash-storage-data-loaded', JSON.stringify(dataLoaded));
+
+                            // Phase 1: Dash renderer初期化後に直接session復元APIを呼び出す
+                            // Note: {%renderer%}の後に配置されているため、すぐに実行可能
+                            console.log('[Phase 1 Direct API] Triggering session restore directly');
+
+                            // process_upload callbackをトリガー（conftest.pyと同じ方式）
+                            fetch('/_dash-update-component', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify({
+                                    output: '..session-id.data...session-metadata.data...data-loaded.data...scenario-dropdown.options...scenario-dropdown.value...scenario-selector-div.style...kpi-data-store.data...main-content.children..',
+                                    outputs: [
+                                        {id: 'session-id', property: 'data'},
+                                        {id: 'session-metadata', property: 'data'},
+                                        {id: 'data-loaded', property: 'data'},
+                                        {id: 'scenario-dropdown', property: 'options'},
+                                        {id: 'scenario-dropdown', property: 'value'},
+                                        {id: 'scenario-selector-div', property: 'style'},
+                                        {id: 'kpi-data-store', property: 'data'},
+                                        {id: 'main-content', property: 'children'}
+                                    ],
+                                    inputs: [
+                                        {id: 'zip-uploader', property: 'contents', value: null},
+                                        {id: 'phase1-restore-trigger', property: 'data', value: {
+                                            session_id: sessionId,
+                                            data_loaded: dataLoaded,
+                                            timestamp: Date.now()
+                                        }}
+                                    ],
+                                    state: [
+                                        {id: 'zip-uploader', property: 'filename', value: null}
+                                    ],
+                                    changedPropIds: ['phase1-restore-trigger.data']
+                                })
+                            })
+                            .then(response => response.json())
+                            .then(data => {
+                                console.log('[Phase 1 Direct API] Session restore response:', data);
+
+                                // URLをクリーンにする
+                                const cleanUrl = window.location.origin + window.location.pathname;
+                                window.history.replaceState({}, '', cleanUrl);
+                                console.log('[Phase 1 Direct API] URL cleaned');
+                            })
+                            .catch(error => {
+                                console.error('[Phase 1 Direct API] Error during session restore:', error);
+                            });
+                        } else {
+                            console.log('[Phase 1 Direct API] No session_id in URL');
+                        }
+                    }, 1000); // 1000ms遅延でDashRenderer完全初期化を待つ
+                }
+
+                // DOMの状態に応じて実行
+                // document.readyState が 'loading' の場合はDOMContentLoadedを待つ
+                // それ以外（'interactive' または 'complete'）の場合は即座に実行
+                if (document.readyState === 'loading') {
+                    console.log('[Phase 1 Direct API] Waiting for DOMContentLoaded...');
+                    document.addEventListener('DOMContentLoaded', executeSessionRestore);
+                } else {
+                    console.log('[Phase 1 Direct API] DOM already ready, executing immediately...');
+                    executeSessionRestore();
+                }
+            })();
+            </script>
         </footer>
     </body>
 </html>
@@ -6959,15 +7056,22 @@ def create_blueprint_analysis_tab() -> html.Div:
     ])
 
 # --- メインレイアウト ---
+# Phase 1: セッション復元スクリプトは app.index_string に移動（HTML <head> 内で実行）
 app.layout = html.Div([
-    # セッション管理ストレージ（Phase 2+ callback用）
-    dcc.Store(id='session-id'),
-    dcc.Store(id='session-metadata'),
+    # URL監視（Phase 1: クエリパラメータからセッション復帰）
+    dcc.Location(id='url', refresh=False),
+
+    # セッション管理ストレージ（Phase 1: リロード保持対応）
+    dcc.Store(id='session-id', storage_type='session'),
+    dcc.Store(id='session-metadata', storage_type='session'),
+
+    # Phase 1: URL復元トリガー（memoryタイプ - clientsideからのみ書き込み）
+    dcc.Store(id='phase1-restore-trigger', storage_type='memory'),
 
     # レスポンシブ対応ストレージ
     dcc.Store(id='device-info-store', storage_type='session'),
     dcc.Store(id='screen-size-store', storage_type='session'),
-    html.Div(id='app-loading-trigger', children='loaded', style={'display': 'none'}),
+
     dcc.Store(id='kpi-data-store', storage_type='memory'),
     dcc.Store(id='data-loaded', storage_type='memory'),
     dcc.Store(id='full-analysis-store', storage_type='memory'),
@@ -7010,7 +7114,7 @@ app.layout = html.Div([
                 ], style={'marginBottom': '15px', 'color': '#555'}),
             ]),
             dcc.Upload(
-                id='upload-data',
+                id='zip-uploader',
                 children=html.Div([
                     html.Div([
                         html.I(className="fas fa-cloud-upload-alt", 
@@ -7122,6 +7226,45 @@ app.clientside_callback(
      Output('screen-size-store', 'data')],
     [Input('app-loading-trigger', 'children')]
 )
+
+# Phase 1: セッション復元用 Server-side Callback (廃止)
+# Note: Dashのcallback制約により、初回ロード時にInput('url', 'search')は発火しない
+# 代わりにapp.index_stringのDirect API方式を使用
+# @app.callback(
+#     Output('phase1-restore-trigger', 'data'),
+#     Input('url', 'search'),
+#     prevent_initial_call=False
+# )
+# @safe_callback
+# def detect_session_from_url(search):
+#     """Phase 1: URLパラメータからsession_idを検出してreactive chainをトリガー"""
+#     log.info(f"[Phase 1 Server] detect_session_from_url called with search={search}")
+#     if not search:
+#         log.debug("[Phase 1 Server] No search params in URL")
+#         return dash.no_update
+#
+#     params = dict(parse_qsl(search.lstrip('?')))
+#     session_id = params.get('session_id')
+#
+#     if not session_id:
+#         log.debug("[Phase 1 Server] No session_id in URL parameters")
+#         return dash.no_update
+#
+#     log.info(f"[Phase 1 Server] Detected session_id from URL: {session_id}")
+#
+#     trigger_data = {
+#         'session_id': session_id,
+#         'data_loaded': {
+#             'success': True,
+#             'restored': True,
+#             'timestamp': time.time() * 1000,
+#             'source': 'url_parameter_serverside'
+#         },
+#         'timestamp': time.time() * 1000
+#     }
+#
+#     log.info(f"[Phase 1 Server] Triggering session restore with: {trigger_data}")
+#     return trigger_data
 
 # レスポンシブレイアウト更新コールバック（現在無効化 - 対応するIDが存在しないため）
 # @app.callback(
@@ -7877,12 +8020,63 @@ def update_individual_analysis_content_OLD_PHASE2(selected_staff, synergy_type):
     Output('scenario-dropdown', 'options'),
     Output('scenario-dropdown', 'value'),
     Output('scenario-selector-div', 'style'),
-    Input('upload-data', 'contents'),
-    State('upload-data', 'filename')
+    Output('kpi-data-store', 'data'),  # Phase 1: Direct APIでタブ表示のため追加
+    Output('main-content', 'children'),  # Phase 1: Direct APIでタブ表示のため追加
+    Input('zip-uploader', 'contents'),
+    Input('phase1-restore-trigger', 'data'),  # Phase 1: URL復元トリガー
+    State('zip-uploader', 'filename')
 )
 @safe_callback
-def process_upload(contents, filename):
-    """改善されたファイルアップロード処理（SessionData対応・Phase 1）"""
+def process_upload(contents, phase1_trigger, filename):
+    """改善されたファイルアップロード処理（SessionData対応・Phase 1）
+
+    Phase 1対応: 2つのケースを処理
+    1. 通常アップロード: contents が提供された場合
+    2. URL復元: phase1_trigger からsession_idを受け取った場合
+    """
+    # Phase 1: URL復元の場合
+    if phase1_trigger and not contents:
+        session_id = phase1_trigger.get('session_id')
+        data_loaded = phase1_trigger.get('data_loaded')
+
+        if session_id:
+            log.info(f"[Phase 1] Session restore from URL: {session_id}")
+            _set_current_session_id(session_id)
+
+            # セッションが存在するか確認
+            session = get_session(session_id)
+            if session:
+                scenarios = session.available_scenarios()
+                if scenarios:
+                    log.info(f"[Phase 1] Session found with {len(scenarios)} scenarios")
+
+                    # シナリオオプションを生成
+                    scenario_options = [
+                        {'label': name.replace('_', ' ').title(), 'value': name}
+                        for name in scenarios
+                    ]
+                    default_scenario = scenarios[0] if scenarios else None
+
+                    # Phase 1: タブUIを生成（Direct API用）
+                    log.info(f"[Phase 1] Generating tab UI for session restore")
+                    tab_ui = create_main_ui_tabs()
+                    kpi_data = {}  # 空のKPIデータ（後でupdate_main_contentロジックで更新可能）
+
+                    return (
+                        session_id,
+                        {'scenarios': scenarios},
+                        data_loaded or {'success': True, 'restored': True},
+                        scenario_options,
+                        default_scenario,
+                        {'display': 'block'},
+                        kpi_data,  # kpi-data-store.data
+                        tab_ui  # main-content.children
+                    )
+            else:
+                log.warning(f"[Phase 1] Session {session_id} not found or empty")
+                raise PreventUpdate
+
+    # 通常のアップロード処理
     if contents is None:
         raise PreventUpdate
 
@@ -7915,7 +8109,7 @@ def process_upload(contents, filename):
                 return None, None, {
                     'error': formatted_error,
                     'validation_result': validation_result
-                }, [], None, {'display': 'none'}
+                }, [], None, {'display': 'none'}, {}, html.Div()
                 
             # 警告がある場合はログに記録
             if validation_result.get('warnings'):
@@ -7998,7 +8192,12 @@ def process_upload(contents, filename):
                     complete_step("preprocessing", "データ入稿フロー完了")
 
                 log.info(f"[データ入稿] ZIP処理完了 - シナリオ数: {len(scenarios)}")
-                return session_id, metadata, data_loaded, scenario_options, first_scenario, {'display': 'block'}
+
+                # タブUIを生成（Phase 1: Direct API対応）
+                tab_ui = create_main_ui_tabs()
+                kpi_data = {}  # 空のKPIデータ
+
+                return session_id, metadata, data_loaded, scenario_options, first_scenario, {'display': 'block'}, kpi_data, tab_ui
 
             except Exception as e:
                 log.error(f"[データ入稿] SessionData作成エラー: {e}", exc_info=True)
@@ -8118,146 +8317,46 @@ def process_upload(contents, filename):
                 }
             }
 
-            return session_id, metadata, data_loaded, scenario_options, first_scenario, {'display': 'block'}
+            # タブUIを生成（通常のアップロード時も返す）
+            log.info(f"[データ入稿] Generating tab UI for normal upload")
+            tab_ui = create_main_ui_tabs()
+            kpi_data = {}  # 空のKPIデータ
+
+            return session_id, metadata, data_loaded, scenario_options, first_scenario, {'display': 'block'}, kpi_data, tab_ui
 
         else:
             log.error(f"[データ入稿] 未サポート形式: {file_ext}")
             return None, None, {
                 'error': f'未サポートのファイル形式です: {file_ext}\n' +
                        'サポート形式: .zip, .xlsx, .csv'
-            }, [], None, {'display': 'none'}
+            }, [], None, {'display': 'none'}, {}, html.Div()
 
     except zipfile.BadZipFile:
         log.error("[データ入稿] 破損したZIPファイル")
         return None, None, {
             'error': '破損したZIPファイルです。\n' +
                    'ファイルが正しくダウンロードされているか確認してください。'
-        }, [], None, {'display': 'none'}
+        }, [], None, {'display': 'none'}, {}, html.Div()
     except Exception as e:
         log.error(f"[データ入稿] 処理エラー: {e}", exc_info=True)
         return None, None, {
             'error': f'ファイル処理中にエラーが発生しました:\n{str(e)}\n\n' +
                    'ファイル形式や内容を確認してください。'
-        }, [], None, {'display': 'none'}
+        }, [], None, {'display': 'none'}, {}, html.Div()
 
 
-@app.callback(
-    Output('kpi-data-store', 'data'),
-    Output('main-content', 'children'),
-    Input('scenario-dropdown', 'value'),
-    State('data-loaded', 'data'),
-    State('session-id', 'data'),
-    State('session-metadata', 'data')
-)
-@safe_callback
-def update_main_content(selected_scenario, data_status, session_id, metadata):
-    """シナリオ選択に応じてデータを読み込み、メインUIを更新（SessionData対応・Phase 1）"""
-    # Phase 1: session_idを設定
-    if session_id:
-        _set_current_session_id(session_id)
-        log.info(f"[update_main_content] session_id設定: {session_id}")
+# Phase 1: セッション復元（Direct API方式）
+# 1. HTML scriptがURLパラメータを検出
+# 2. sessionStorageに保存（dcc.Store用）
+# 3. Dash準備完了後、直接/_dash-update-component APIを呼び出してprocess_upload callbackをトリガー
+# 4. Server-side callbackが session-id, scenario-dropdown等を更新し、直接タブUIも返す
+#
+# Note: Clientside callbackは使用しない（prevent_initial_call=Falseでも初回ロード時にトリガーされないため）
+# Note: update_main_content callbackはprocess_uploadと Output競合するため無効化（process_uploadから直接タブを返すため）
 
-    current_dir = _get_current_scenario_dir()
-
-    # データステータスがない場合でも、デフォルトのシナリオが利用可能ならそれを使用
-    if (
-        not selected_scenario
-        or not data_status
-        or 'success' not in data_status
-        or 'scenarios' not in data_status
-    ):
-        # デフォルトのシナリオディレクトリが利用可能かチェック
-        if current_dir and current_dir.exists():
-            log.info(f"デフォルトシナリオディレクトリを使用: {current_dir}")
-            # デフォルトのKPIデータを作成
-            kpi_data = {}
-            # UIを表示（アップロード不要）
-            return kpi_data, create_main_ui_tabs()
-        else:
-            raise PreventUpdate
-
-    data_dir = Path(data_status['scenarios'].get(selected_scenario, ''))
-    if not data_dir.exists():
-        raise PreventUpdate
-
-    log.info(f"Switching to scenario {selected_scenario} at {data_dir}")
-
-    # Scenario has changed; reset caches and store new directory
-    _set_current_scenario_dir(data_dir)
-
-    # Phase 1: セッション固有のキャッシュのみクリア（マルチユーザー対応）
-    clear_data_cache(session_id=session_id, scenario_name=selected_scenario)
-
-    # 按分方式データ生成・キャッシュ更新
-    excel_path = None
-    for excel_file in data_dir.glob("*.xlsx"):
-        if "テスト用データ" in excel_file.name:
-            excel_path = str(excel_file)
-            break
-
-    if excel_path:
-        try:
-            log.info(f"按分方式データキャッシュ更新開始: {selected_scenario}")
-
-            # 分析処理開始の監視
-            if processing_monitor:
-                start_processing()
-                start_step("preprocessing", "データ前処理を実行中...")
-
-            # パフォーマンス測定開始
-            if performance_monitor:
-                performance_monitor.start_timing("data_preprocessing")
-
-            # Phase 1: セッション固有のキャッシュキーで更新（マルチユーザー対応）
-            update_data_cache_with_proportional(
-                DATA_CACHE,
-                excel_path,
-                selected_scenario,
-                session_id=session_id,
-                scenario_name=selected_scenario
-            )
-            log.info("按分方式データキャッシュ更新完了")
-            
-            if processing_monitor:
-                complete_step("preprocessing", "データ前処理完了")
-                start_step("analysis", "共通データ読み込み中...")
-            
-            # 共通データの事前読み込みを実行
-            preload_common_data()
-            
-            if processing_monitor:
-                complete_step("analysis", "データ読み込み完了")
-            
-            # パフォーマンス測定終了
-            if performance_monitor:
-                duration = performance_monitor.end_timing("data_preprocessing")
-                log.info(f"[パフォーマンス] データ前処理時間: {duration:.2f}秒")
-                
-        except Exception as e:
-            log.warning(f"按分方式データ更新エラー: {e}")
-            if processing_monitor:
-                fail_step("preprocessing", f"エラー: {str(e)}")
-
-    pre_aggr = data_get('pre_aggregated_data')
-    if pre_aggr is None or (isinstance(pre_aggr, pd.DataFrame) and pre_aggr.empty):
-        return {}, html.Div(f"エラー: {(data_dir / 'pre_aggregated_data.parquet').name} が見つかりません。")  # type: ignore
-
-    kpi_data = {}
-
-    # ダッシュボード分析レポートの生成
-    try:
-        current_dir = _get_current_scenario_dir()
-        if current_dir and current_dir.exists():
-            report_file = create_dashboard_analysis_report(current_dir, analysis_type="DASHBOARD")
-            if report_file:
-                log.info(f"[dash_app] ダッシュボード分析レポート生成完了: {report_file.name}")
-            else:
-                log.warning("[dash_app] ダッシュボード分析レポート生成に失敗しました")
-    except Exception as e_report:
-        log.error(f"[dash_app] ダッシュボード分析レポート生成エラー: {e_report}")
-
-    return kpi_data, create_main_ui_tabs()
-
+# Phase 1: update_main_content callbackは削除（process_uploadから直接タブUIを返すため）
+# 以前のupdate_main_content callbackは不要になりました。
+# 理由: Direct API方式では、process_upload callbackが直接タブUIを返す必要があるため。
 
 def create_main_ui_tabs():
     """メインUIタブを作成（論理的グループ化版）"""

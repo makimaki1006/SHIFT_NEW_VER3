@@ -15,14 +15,15 @@ sys.path.insert(0, str(current_dir))
 print("Dash起動中 (E2E テスト用)...")
 print("ブラウザでアクセス: http://127.0.0.1:8055")
 
-# Import dash and create independent app instance for E2E testing
+# Import dash and use dash_app.app instance (Phase 1 統合)
 import dash
 from dash import dcc, html
 from dash.dependencies import Input, Output, State
 import dash_app
 
-# Create independent app instance (not using dash_app.app)
-app = dash.Dash(__name__, suppress_callback_exceptions=True)
+# Use dash_app.app instance (unified app architecture)
+# run_dash_server.pyはエントリポイントとして dash_app.appを起動
+app = dash_app.app
 
 # Import COLOR_SCHEMES for UI
 COLOR_SCHEMES = dash_app.COLOR_SCHEMES
@@ -65,75 +66,13 @@ TAB_KEYS = [
 # NOTE: Using independent app instance for E2E testing.
 # Shortage callbacks will be registered separately via register_shortage_callbacks().
 
-# Define basic layout with accessibility (Phase 3-3)
-app.layout = html.Div([
-    html.H2("ShiftSuite Multi-tenant Dashboard", **{'aria-level': '1'}),
-
-    # Upload component
-    dcc.Upload(
-        id='zip-uploader',
-        children=html.Div([
-            'Drag and Drop or ',
-            html.A('Select ZIP File')
-        ]),
-        style={
-            'width': '100%',
-            'height': '60px',
-            'lineHeight': '60px',
-            'borderWidth': '1px',
-            'borderStyle': 'dashed',
-            'borderRadius': '5px',
-            'textAlign': 'center',
-            'margin': '10px'
-        },
-        multiple=False
-    ),
-
-    # Session info (also defined in dash_app.py for standalone mode)
-    dcc.Store(id='session-id'),
-    dcc.Store(id='session-metadata'),
-
-    # Phase 3-5: Color Scheme Selection
-    dcc.Store(id='selected-color-scheme', data=DEFAULT_COLOR_SCHEME),
-    html.Div([
-        html.Label('カラースキーム選択:', style={'fontWeight': 'bold', 'marginRight': '10px'}),
-        dcc.Dropdown(
-            id='color-scheme-dropdown',
-            options=[
-                {'label': scheme_data['name'], 'value': scheme_key}
-                for scheme_key, scheme_data in COLOR_SCHEMES.items()
-            ],
-            value=DEFAULT_COLOR_SCHEME,
-            clearable=False,
-            style={'width': '300px'}
-        )
-    ], style={'margin': '10px', 'display': 'flex', 'alignItems': 'center'}, id='color-scheme-selector'),
-
-    # Scenario Selection (旧システム完全復旧のための必須機能)
-    html.Div([
-        html.Label('シナリオ選択:', style={'fontWeight': 'bold', 'marginRight': '10px'}),
-        dcc.Dropdown(
-            id='scenario-dropdown',
-            options=[],
-            value=None,
-            clearable=False,
-            style={'width': '300px'},
-            placeholder='ZIPファイルをアップロードしてください'
-        )
-    ], style={'margin': '10px', 'display': 'flex', 'alignItems': 'center'}, id='scenario-selector'),
-
-    # Navigation tabs (will be populated after upload)
-    html.Div(id='nav-tabs', **{'aria-live': 'polite'}),
-
-    # Tab selector store
-    dcc.Store(id='selected-tab', data='overview'),
-
-    # Tab content
-    html.Div(id='tab-content', role="main", **{'aria-live': 'polite', 'aria-label': 'メインコンテンツ'}),
-
-    # Hidden div for storing upload status
-    html.Div(id='upload-output', style={'display': 'none'}, **{'aria-hidden': 'true'}),
-], role="application")
+# Phase 1 統合: layoutはdash_app.appに定義されている
+# run_dash_server.pyでlayoutを上書きしない（dash_app.appのlayoutをそのまま使用）
+# dash_app.py Line 6962-でlayoutが定義されており、以下が含まれる:
+# - dcc.Store(id='session-id', storage_type='session')
+# - dcc.Store(id='session-metadata', storage_type='session')
+# - dcc.Upload(id='zip-uploader', ...)
+# - 全てのタブコンテンツ
 
 # シナリオ名の日本語マッピング（旧システム完全復旧のため）
 SCENARIO_DISPLAY_NAMES = {
@@ -142,68 +81,13 @@ SCENARIO_DISPLAY_NAMES = {
     'out_p25_based': '25パーセンタイルベース'
 }
 
-# Upload callback - シナリオドロップダウンのオプションも返す
-@app.callback(
-    [Output('session-id', 'data'),
-     Output('session-metadata', 'data'),
-     Output('scenario-dropdown', 'options'),
-     Output('scenario-dropdown', 'value'),
-     Output('nav-tabs', 'children'),
-     Output('upload-output', 'children')],
-    [Input('zip-uploader', 'contents')],
-    [State('zip-uploader', 'filename')]
-)
-def handle_upload(contents, filename):
-    if contents is None:
-        return None, None, [], None, None, None
-
-    try:
-        # Generate session ID
-        import uuid
-        session_id = str(uuid.uuid4())
-
-        # Load session data using dash_app module
-        session = dash_app.load_session_data_from_zip(contents, filename)
-        dash_app.register_session(session_id, session)
-
-        # Get metadata
-        metadata = session.metadata()
-
-        # シナリオオプションを生成（旧システム完全復旧のため）
-        available_scenarios = session.available_scenarios()
-        scenario_options = [
-            {
-                'label': SCENARIO_DISPLAY_NAMES.get(scenario, scenario),
-                'value': scenario
-            }
-            for scenario in available_scenarios
-        ]
-
-        # デフォルトで最初のシナリオを選択
-        default_scenario = available_scenarios[0] if available_scenarios else None
-
-        # Create navigation links for tabs (Phase 1 Task 1.1: 日本語+絵文字表示)
-        # Phase 3-3: Accessibility improvements - navigation with ARIA
-        nav_links = html.Div([
-            html.Button(
-                TAB_DISPLAY_NAMES[tab_key][0],  # 日本語+絵文字表示名
-                id={'type': 'tab-btn', 'index': tab_key},  # 内部値（ルーティングキー）
-                className="nav-link",
-                n_clicks=0,
-                style={'margin': '5px', 'padding': '10px', 'cursor': 'pointer'},
-                **{
-                    'aria-label': TAB_DISPLAY_NAMES[tab_key][1],  # 日本語ARIA-label
-                    'tabIndex': 0,
-                    'data-testid': f'tab-{tab_key}'  # テスト用ID（言語非依存）
-                }
-            )
-            for tab_key in TAB_KEYS
-        ], style={'display': 'flex', 'flexWrap': 'wrap', 'gap': '5px'}, role="navigation", **{'aria-label': 'タブナビゲーション'})
-
-        return session_id, metadata, scenario_options, default_scenario, nav_links, "Upload successful"
-
-    except Exception as e:
-        return None, None, [], None, html.Div(f"Error: {str(e)}"), f"Upload failed: {str(e)}"
+# Phase 1 統合 (Deploy 20.19): handle_upload callbackは削除
+# upload処理はdash_app.pyのprocess_upload callbackに一本化
+# run_dash_server.pyはエントリポイントとしてのみ機能
+# 理由:
+# - 実際に動作しているのはdash_app.pyのprocess_upload
+# - callback二重実装の矛盾を解消
+# - storage_type='session'が確実に反映される
 
 # Tab selection callback
 @app.callback(
