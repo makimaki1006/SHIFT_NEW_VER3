@@ -1856,7 +1856,8 @@ app.index_string = '''
                             sessionStorage.setItem('dash-storage-data-loaded', JSON.stringify(dataLoaded));
 
                             // Phase 1: Dash renderer初期化後に直接session復元APIを呼び出す
-                            // Note: {%renderer%}の後に配置されているため、すぐに実行可能
+                            // Note: Dash renderer script is loaded above
+                            // (Dash placeholder gets replaced at runtime, avoiding script tag issues)
                             console.log('[Phase 1 Direct API] Triggering session restore directly');
 
                             // process_upload callbackをトリガー（conftest.pyと同じ方式）
