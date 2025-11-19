@@ -78,19 +78,27 @@ def click_tab(page: Page, tab_name: str, timeout: int = 30000) -> None:
     page.wait_for_timeout(3000)
 
     # Wait for the tab container to become visible
-    # Note: Some tabs may take longer to render content
-    try:
-        page.wait_for_selector(f'#{container_id}', state='visible', timeout=timeout)
-    except Exception:
-        # If timeout, check if element exists but is hidden (style issue)
-        element = page.locator(f'#{container_id}')
-        if element.count() > 0:
-            # Element exists, wait a bit more for style change
-            page.wait_for_timeout(3000)
-            if not element.is_visible():
-                raise TimeoutError(f'Tab container {container_id} exists but not visible after click')
+    # Note: Use style.display check instead of Playwright's wait_for_selector
+    # because is_visible() may return False even when display='block'
+    import time
+    start_time = time.time()
+    while (time.time() - start_time) * 1000 < timeout:
+        display = page.evaluate(f"""() => {{
+            const el = document.getElementById('{container_id}');
+            return el ? el.style.display : 'none';
+        }}""")
+        if display != 'none' and display != '':
+            break
+        page.wait_for_timeout(500)
+    else:
+        # Check if element exists
+        exists = page.evaluate(f"""() => {{
+            return document.getElementById('{container_id}') !== null;
+        }}""")
+        if exists:
+            raise TimeoutError(f'Tab container {container_id} exists but style.display is still hidden after click')
         else:
-            raise
+            raise TimeoutError(f'Tab container {container_id} not found')
 
     # Additional wait for content rendering
     page.wait_for_timeout(1000)
@@ -154,10 +162,19 @@ def is_tab_visible(page: Page, tab_name: str) -> bool:
         tab_name: Tab name
 
     Returns:
-        True if the tab container is visible
+        True if the tab container is visible (display != 'none')
     """
     if tab_name not in TAB_CONTAINER_MAP:
         return False
 
     container_id = TAB_CONTAINER_MAP[tab_name]
-    return page.locator(f'#{container_id}').is_visible()
+
+    # Check style.display instead of Playwright's is_visible()
+    # because is_visible() may return False even when display='block'
+    # if the element is not in viewport
+    display = page.evaluate(f"""() => {{
+        const el = document.getElementById('{container_id}');
+        return el ? el.style.display : 'none';
+    }}""")
+
+    return display != 'none' and display != ''
