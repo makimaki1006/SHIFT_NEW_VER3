@@ -8658,10 +8658,11 @@ def initialize_shortage_content(style, selected_scenario, data_status):
 #         return html.Div(f"エラーが発生しました: {str(e)}", style={'color': 'red'})
 # 
 @app.callback(
-    Output('optimization-content', 'children'),
+    Output('optimization-content', 'children', allow_duplicate=True),
     Input('optimization-tab-container', 'style'),
     State('scenario-dropdown', 'value'),
     State('data-loaded', 'data'),
+    prevent_initial_call=True
 )
 @safe_callback
 def initialize_optimization_content(style, selected_scenario, data_status):
@@ -9498,7 +9499,8 @@ def register_shortage_callbacks(app_instance):
 
 
 # Register shortage callbacks to the module-level app instance
-register_shortage_callbacks(app)
+# Deploy 20.21: コメントアウト - 二重登録防止
+# register_shortage_callbacks(app)
 
 
 @app.callback(
@@ -11422,7 +11424,7 @@ def register_interactive_callbacks(app_instance):
             return None
 
     @app_instance.callback(
-        Output('optimization-content', 'children'),
+        Output('optimization-content', 'children', allow_duplicate=True),
         [Input('opt-scope', 'value'),
          Input({'type': 'opt-detail', 'index': ALL}, 'value')],
         [State('session-id', 'data'),
@@ -11490,7 +11492,7 @@ def register_interactive_callbacks(app_instance):
 
     # Phase 2+: Cost Tab dynamic wage inputs
     @app_instance.callback(
-        Output('wage-input-container', 'children'),
+        Output('wage-input-container', 'children', allow_duplicate=True),
         Input('cost-by-radio', 'value'),
         [State('session-id', 'data'),
          State('session-metadata', 'data')],
