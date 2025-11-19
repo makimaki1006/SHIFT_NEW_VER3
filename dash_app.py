@@ -9540,42 +9540,43 @@ def update_opt_detail(scope):
         ])
     return None
 
-@app.callback(
-    Output('optimization-content', 'children', allow_duplicate=True),
-    Input('opt-scope', 'value'),
-    Input({'type': 'opt-detail', 'index': ALL}, 'value'),
-    prevent_initial_call=True
-)
-@safe_callback
-def update_optimization_content(*args):
-    """
-    最適化分析コンテンツを更新（Gunicorn対応版）
-
-    Gunicorn環境対応:
-    - *argsで引数を受け取り、環境差異を吸収
-    - ローカル環境とGunicorn環境の両方に対応
-    """
-    # 引数を展開
-    if len(args) == 2:
-        # ローカル環境: scope, detail_valuesとして2引数
-        scope, detail_values = args[0], args[1]
-    elif len(args) == 1:
-        # 単一引数の場合
-        scope = args[0]
-        detail_values = []
-    else:
-        # Gunicorn環境: scope + 複数のALL値として渡される可能性
-        scope = args[0] if args else None
-        detail_values = list(args[1:]) if len(args) > 1 else []
-
-    # detail_valuesをリストに正規化
-    if not isinstance(detail_values, list):
-        detail_values = [detail_values] if detail_values else []
-
-    log.info(f"[Optimization] Callback: scope={scope}, detail_values={detail_values}")
-
-    # ヘルパー関数に全ロジックを委譲
-    return _generate_optimization_content(scope, detail_values)
+# Deploy 20.21 Phase 2: 以下のコールバックは register_interactive_callbacks 内の同一Inputコールバック(line 11427)と重複のためコメントアウト
+# @app.callback(
+#     Output('optimization-content', 'children', allow_duplicate=True),
+#     Input('opt-scope', 'value'),
+#     Input({'type': 'opt-detail', 'index': ALL}, 'value'),
+#     prevent_initial_call=True
+# )
+# @safe_callback
+# def update_optimization_content(*args):
+#     """
+#     最適化分析コンテンツを更新（Gunicorn対応版）
+#
+#     Gunicorn環境対応:
+#     - *argsで引数を受け取り、環境差異を吸収
+#     - ローカル環境とGunicorn環境の両方に対応
+#     """
+#     # 引数を展開
+#     if len(args) == 2:
+#         # ローカル環境: scope, detail_valuesとして2引数
+#         scope, detail_values = args[0], args[1]
+#     elif len(args) == 1:
+#         # 単一引数の場合
+#         scope = args[0]
+#         detail_values = []
+#     else:
+#         # Gunicorn環境: scope + 複数のALL値として渡される可能性
+#         scope = args[0] if args else None
+#         detail_values = list(args[1:]) if len(args) > 1 else []
+#
+#     # detail_valuesをリストに正規化
+#     if not isinstance(detail_values, list):
+#         detail_values = [detail_values] if detail_values else []
+#
+#     log.info(f"[Optimization] Callback: scope={scope}, detail_values={detail_values}")
+#
+#     # ヘルパー関数に全ロジックを委譲
+#     return _generate_optimization_content(scope, detail_values)
 
 
 # @app.callback(
