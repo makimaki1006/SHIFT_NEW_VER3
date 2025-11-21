@@ -3325,7 +3325,10 @@ def generate_heatmap_figure(df_heat: pd.DataFrame, title: str, device_type: str 
         font=dict(size=10 if len(display_df_renamed.columns) > 30 else 12),
         # Y軸の設定（デフォルトに戻す）
     )
-    
+
+    # Deploy 20.26: Y軸を反転して時間を0:00から昇順表示（ユーザーファースト）
+    fig.update_yaxes(autorange='reversed')
+
     # 軸ラベルの最適化
     if len(display_df_renamed.columns) > 30:
         # 多くの日付がある場合は回転
