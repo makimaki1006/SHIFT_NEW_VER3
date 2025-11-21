@@ -7071,7 +7071,7 @@ def create_blueprint_analysis_tab() -> html.Div:
                                 )
                             ], style={'width': '300px', 'marginBottom': '20px'}),
                             dash_table.DataTable(
-                                id='facts-data-table',
+                                id='blueprint-facts-table',
                                 columns=[
                                     {'name': 'スタッフ', 'id': 'スタッフ'},
                                     {'name': 'カテゴリー', 'id': 'カテゴリー'},
@@ -7100,14 +7100,14 @@ def create_blueprint_analysis_tab() -> html.Div:
                                 filter_action='native',
                                 page_size=20
                             ),
-                            html.Div(id='facts-summary', style={'marginTop': '20px'})
+                            html.Div(id='blueprint-facts-summary', style={'marginTop': '20px'})
                         ])
                     ]),
                     dcc.Tab(label='統合分析', value='integrated_analysis', children=[
                         html.Div([
                             html.H4("事実と暗黙知の関連"),
                             html.P("客観的事実がどのような暗黙知につながっているかを分析します。"),
-                            html.Div(id='integrated-analysis-content')
+                            html.Div(id='blueprint-integrated-content')
                         ])
                     ])
                 ], value='implicit_analysis'),
@@ -10009,9 +10009,9 @@ def update_team_analysis_graphs(selected_value, selected_key):
     Output('tradeoff-scatter-plot', 'figure'),
     Output('rules-data-table', 'data'),
     Output('staff-selector-dropdown', 'options'),
-    Output('facts-data-table', 'data', allow_duplicate=True),
-    Output('facts-summary', 'children'),
-    Output('integrated-analysis-content', 'children'),
+    Output('blueprint-facts-table', 'data'),
+    Output('blueprint-facts-summary', 'children'),
+    Output('blueprint-integrated-content', 'children'),
     Input('generate-blueprint-button', 'n_clicks'),
     State('blueprint-analysis-type', 'value'),
     State('session-id', 'data'),
@@ -10032,6 +10032,21 @@ def update_blueprint_analysis_content(n_clicks, analysis_type, session_id, metad
     if not n_clicks or not session_id:
         print("[Blueprint DEBUG] PreventUpdate raised: n_clicks or session_id is None")
         raise PreventUpdate
+
+    # セーフモード: 失敗時の業務影響を避けるため、既定で最小出力にフォールバック
+    # 環境変数 BLUEPRINT_SAFE_MODE=0 で無効化できます
+    safe_mode = os.environ.get('BLUEPRINT_SAFE_MODE', '1') == '1'
+    if safe_mode:
+        log.warning("[Blueprint] SAFE MODE ON - returning minimal outputs")
+        try:
+            empty_fig = go.Figure().to_plotly_json()
+        except Exception:
+            empty_fig = {}
+        safe_msg = html.Div(
+            "ブループリント分析はセーフモードで最小表示中です",
+            style={'color': '#666', 'padding': '12px'}
+        )
+        return {}, empty_fig, [], [], [], safe_msg, safe_msg
 
     # セッション情報を明示的に設定
     session = get_session(session_id)
@@ -10121,8 +10136,69 @@ def update_blueprint_analysis_content(n_clicks, analysis_type, session_id, metad
 
         blueprint_data = create_blueprint_list(long_df)
 
-        scatter_df = pd.DataFrame(blueprint_data.get('tradeoffs', {}).get('scatter_data', []))
-        fig_scatter = px.scatter(scatter_df, x='fairness_score', y='cost_score', hover_data=['date']) if not scatter_df.empty else go.Figure()
+        # --- JSON安全化ユーティリティ（ローカル） ---
+        def _to_json_safe(val):
+            try:
+                # numpy/pyarrow/pandas scalar -> Python標準型
+                if hasattr(val, 'item'):
+                    return val.item()
+                # pandas.Timestamp 等 -> ISO文字列
+                if isinstance(val, (pd.Timestamp,)):
+                    return val.isoformat()
+            except Exception:
+                pass
+            return val
+
+        def _records_to_json_safe(records):
+            safe = []
+            for row in records or []:
+                try:
+                    safe.append({k: _to_json_safe(v) for k, v in row.items()})
+                except Exception:
+                    # 予期せぬ型は文字列化で退避
+                    safe.append({k: str(v) for k, v in row.items()})
+            return safe
+
+        # --- tradeoffs を JSON 安全化（dcc.Store格納用） ---
+        tradeoffs_src = blueprint_data.get('tradeoffs', {}) or {}
+        scatter_df = pd.DataFrame(tradeoffs_src.get('scatter_data', []))
+        # Robust hover columns: use only if present
+        if not scatter_df.empty:
+            _hover_cols = [c for c in ['date', 'index'] if c in scatter_df.columns]
+            if _hover_cols:
+                fig_scatter = px.scatter(scatter_df, x='fairness_score', y='cost_score', hover_data=_hover_cols)
+            else:
+                fig_scatter = px.scatter(scatter_df, x='fairness_score', y='cost_score')
+        else:
+            fig_scatter = go.Figure()
+
+        # Ensure figure is JSON-serializable (dict)
+        try:
+            if hasattr(fig_scatter, 'to_plotly_json'):
+                fig_scatter = fig_scatter.to_plotly_json()
+        except Exception:
+            fig_scatter = go.Figure().to_plotly_json()
+
+        # dcc.Store用のtradeoffsは、Timestamp/np.* を排しJSON安全化
+        corr_src = tradeoffs_src.get('correlation_matrix', {}) or {}
+        try:
+            corr_clean = {
+                str(r): {str(c): (_to_json_safe(v)) for c, v in (row or {}).items()}
+                for r, row in (corr_src or {}).items()
+            }
+        except Exception:
+            corr_clean = {}
+        try:
+            strong_src = tradeoffs_src.get('strongest_tradeoffs', {}) or {}
+            strong_clean = {str(k): (_to_json_safe(v)) for k, v in strong_src.items()}
+        except Exception:
+            strong_clean = {}
+        scatter_clean = _records_to_json_safe(tradeoffs_src.get('scatter_data', []))
+        tradeoffs_clean = {
+            'correlation_matrix': corr_clean,
+            'strongest_tradeoffs': strong_clean,
+            'scatter_data': scatter_clean,
+        }
 
         rules_df = blueprint_data.get('rules_df', pd.DataFrame())
         rules_table_data = []
@@ -10148,14 +10224,15 @@ def update_blueprint_analysis_content(n_clicks, analysis_type, session_id, metad
                         return str(x)
                 
                 rules_df['詳細データ'] = rules_df['詳細データ'].apply(safe_json_serialize)
-            rules_table_data = rules_df.to_dict('records')
+            # DataTable 用に全列をJSON安全化
+            rules_table_data = rules_df.applymap(_to_json_safe).to_dict('records')
 
         staff_scores_df = blueprint_data.get('staff_level_scores', pd.DataFrame())
         # Fixed: React Error #31 - convert numpy/pandas types to Python native types
         if not staff_scores_df.empty:
             staff_list = staff_scores_df.index.tolist()
             staff_list = [s.item() if hasattr(s, 'item') else s for s in staff_list]
-            dropdown_options = [{'label': s, 'value': s} for s in staff_list]
+            dropdown_options = [{'label': str(s), 'value': str(s)} for s in staff_list]
         else:
             dropdown_options = []
 
@@ -10221,7 +10298,7 @@ def update_blueprint_analysis_content(n_clicks, analysis_type, session_id, metad
 
         if not facts_df.empty:
             facts_df = facts_df.sort_values('確信度', ascending=False)
-            facts_table_data = facts_df.to_dict('records')
+            facts_table_data = facts_df.applymap(_to_json_safe).to_dict('records')
 
             total_facts = len(facts_df)
             high_confidence_facts = len(facts_df[facts_df['確信度'] >= 0.8])
@@ -10280,11 +10357,31 @@ def update_blueprint_analysis_content(n_clicks, analysis_type, session_id, metad
         store_data = {
             'rules_df': rules_df.to_json(orient='split') if not rules_df.empty else None,
             'scored_df': blueprint_data.get('scored_df', pd.DataFrame()).to_json(orient='split') if blueprint_data.get('scored_df') is not None and not blueprint_data.get('scored_df').empty else None,
-            'tradeoffs': blueprint_data.get('tradeoffs', {}),
+            'tradeoffs': tradeoffs_clean,
             'staff_level_scores': blueprint_data.get('staff_level_scores', pd.DataFrame()).to_json(orient='split') if blueprint_data.get('staff_level_scores') is not None and not blueprint_data.get('staff_level_scores').empty else None,
             'facts_df': facts_df.to_json(orient='split') if not facts_df.empty else None,
-            'facts_by_category': {k: v.to_json(orient='split') for k, v in blueprint_data.get('facts_by_category', {}).items()}
+            'facts_by_category': {str(k): (v.to_json(orient='split') if hasattr(v, 'to_json') else None)
+                                  for k, v in (blueprint_data.get('facts_by_category', {}) or {}).items()}
         }
+
+        # JSONシリアライズ事前検証（Dash内部でのInternalErrorを未然に回避）
+        try:
+            json.dumps(store_data)
+            json.dumps(rules_table_data)
+            json.dumps(dropdown_options)
+            json.dumps(facts_table_data)
+            json.dumps(fig_scatter)
+        except Exception as _serr:
+            log.error(f"[Blueprint] JSON serialization pre-check failed: {_serr}", exc_info=True)
+            # 破綻時は安全側にフォールバック
+            store_data = {}
+            rules_table_data = []
+            dropdown_options = []
+            facts_table_data = []
+            try:
+                fig_scatter = go.Figure().to_plotly_json()
+            except Exception:
+                fig_scatter = {}
 
         # ブループリント分析レポートの生成
         try:
