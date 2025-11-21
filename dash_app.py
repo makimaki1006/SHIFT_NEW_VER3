@@ -4569,14 +4569,20 @@ def _generate_optimization_content(scope='overall', detail_values=None) -> html.
         log.info(f"[Optimization] Trying original key: {original_heat_key}")
         df_heat = data_get(original_heat_key, pd.DataFrame())
 
+    # Deploy 20.23: heat_all が空の場合、heat_ALL へのフォールバックを追加
+    if df_heat.empty and heat_key == 'heat_all':
+        log.info("[Optimization] heat_all is empty, trying heat_ALL fallback")
+        df_heat = data_get('heat_ALL', pd.DataFrame())
+
     if df_heat.empty:
         return html.Div(
             "選択された条件の最適化分析データが見つかりません。",
             style={'color': 'red', 'fontWeight': 'bold'}
         )
 
-    # 2. 日付列抽出
-    date_cols = [c for c in df_heat.columns if pd.to_datetime(c, errors='coerce') is not pd.NaT]
+    # 2. 日付列抽出（Deploy 20.23: ロバスト化）
+    dates = pd.to_datetime(pd.Index(df_heat.columns), errors='coerce')
+    date_cols = [c for c, d in zip(df_heat.columns, dates) if pd.notna(d)]
     if not date_cols:
         return html.Div("日付データが見つかりません。")
 
@@ -9998,6 +10004,7 @@ def update_team_analysis_graphs(selected_value, selected_key):
     State('session-metadata', 'data'),
     prevent_initial_call=True
 )
+@safe_callback  # Deploy 20.23: エラーハンドリング保護を追加
 def update_blueprint_analysis_content(n_clicks, analysis_type, session_id, metadata):
     # 🔍 DEBUG: callbackが呼ばれたことを確認
     print("="*80)
