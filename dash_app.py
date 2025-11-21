@@ -10004,7 +10004,6 @@ def update_team_analysis_graphs(selected_value, selected_key):
     State('session-metadata', 'data'),
     prevent_initial_call=True
 )
-@safe_callback  # Deploy 20.23: エラーハンドリング保護を追加
 def update_blueprint_analysis_content(n_clicks, analysis_type, session_id, metadata):
     # 🔍 DEBUG: callbackが呼ばれたことを確認
     print("="*80)
