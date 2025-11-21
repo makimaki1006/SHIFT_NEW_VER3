@@ -5921,22 +5921,36 @@ def _create_leave_tendency_chart(selected_staff: str, staff_df: pd.DataFrame) ->
     try:
         staff_leave_df = staff_df[staff_df.get('holiday_type', '通常勤務') != '通常勤務']
         if not staff_leave_df.empty:
-            daily_leave = leave_analyzer.get_daily_leave_counts(staff_leave_df)
-            if not daily_leave.empty:
-                dow_summary = leave_analyzer.summarize_leave_by_day_count(
-                    daily_leave,
-                    period='dayofweek'
-                )
-                if not dow_summary.empty:
-                    fig = px.bar(
-                        dow_summary,
-                        x='period_unit',
-                        y='total_leave_days',
-                        color='leave_type',
-                        title=f'{selected_staff}さんの曜日別休暇取得日数'
-                    )
-                    fig.update_xaxes(title_text="曜日")
-                    fig.update_yaxes(title_text="日数")
+            try:
+                daily_leave = leave_analyzer.get_daily_leave_counts(staff_leave_df)
+                if not daily_leave.empty:
+                    try:
+                        dow_summary = leave_analyzer.summarize_leave_by_day_count(
+                            daily_leave,
+                            period='dayofweek'
+                        )
+                        # Deploy 20.22: データ検証を追加
+                        if isinstance(dow_summary, pd.DataFrame) and not dow_summary.empty and len(dow_summary) > 0:
+                            # 必須カラムの存在確認
+                            required_cols = ['period_unit', 'total_leave_days']
+                            if all(col in dow_summary.columns for col in required_cols):
+                                fig = px.bar(
+                                    dow_summary,
+                                    x='period_unit',
+                                    y='total_leave_days',
+                                    color='leave_type' if 'leave_type' in dow_summary.columns else None,
+                                    title=f'{selected_staff}さんの曜日別休暇取得日数'
+                                )
+                                fig.update_xaxes(title_text="曜日")
+                                fig.update_yaxes(title_text="日数")
+                            else:
+                                log.warning(f"[Individual] 曜日別集計: 必須カラムなし {list(dow_summary.columns)}")
+                        else:
+                            log.warning(f"[Individual] 曜日別集計: 無効なデータ型 {type(dow_summary)}")
+                    except Exception as summary_e:
+                        log.warning(f"[Individual] 曜日別集計エラー: {summary_e}")
+            except Exception as daily_e:
+                log.warning(f"[Individual] 日別カウントエラー: {daily_e}")
     except Exception as e:
         log.warning(f"[Individual] 休暇傾向分析エラー: {e}")
 
@@ -6020,17 +6034,27 @@ def _generate_individual_basic_analysis(selected_staff: str) -> html.Div:
 
     log.info(f"[Individual] 基本分析生成: {selected_staff}")
 
-    # 各分析を実行
-    work_dist_fig = _create_work_distribution_chart(selected_staff, staff_df)
-    fatigue_score, unfairness_score, score_details_df = _calculate_scores(
-        selected_staff, fatigue_df, fairness_df
-    )
-    coworker_ranking_df = _calculate_coworker_ranking(selected_staff, staff_df, long_df)
-    shortage_h, excess_h = _calculate_contribution(
-        selected_staff, staff_df, shortage_df, excess_df, SLOT_HOURS
-    )
-    leave_fig = _create_leave_tendency_chart(selected_staff, staff_df)
-    mannelido, rhythm = _calculate_work_patterns(selected_staff, staff_df)
+    # 各分析を実行（Deploy 20.22: エラーハンドリング強化）
+    try:
+        work_dist_fig = _create_work_distribution_chart(selected_staff, staff_df)
+        fatigue_score, unfairness_score, score_details_df = _calculate_scores(
+            selected_staff, fatigue_df, fairness_df
+        )
+        coworker_ranking_df = _calculate_coworker_ranking(selected_staff, staff_df, long_df)
+        shortage_h, excess_h = _calculate_contribution(
+            selected_staff, staff_df, shortage_df, excess_df, SLOT_HOURS
+        )
+        leave_fig = _create_leave_tendency_chart(selected_staff, staff_df)
+        mannelido, rhythm = _calculate_work_patterns(selected_staff, staff_df)
+    except Exception as e:
+        log.error(f"[Individual] スタッフ「{selected_staff}」の分析中にエラーが発生しました: {str(e)}")
+        import traceback
+        log.error(f"[Individual] Traceback: {traceback.format_exc()}")
+        return html.Div([
+            html.H3("エラーが発生しました", style={'color': 'red'}),
+            html.P(f"スタッフ「{selected_staff}」の分析中にエラーが発生しました: {str(e)}"),
+            html.P("他のスタッフを選択するか、データを確認してください。")
+        ], style={'padding': '20px'})
 
     # レイアウト組み立て
     return html.Div([
