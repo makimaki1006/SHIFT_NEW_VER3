@@ -16,6 +16,15 @@ print("[Deploy 20.11.2] Registering interactive callbacks for production...")
 dash_app.register_interactive_callbacks(app)
 print("[Deploy 20.11.2] Callbacks registered: 24 callbacks (16 initialize + 8 update)")
 
+# Deploy 20.25: Ensure shortage callbacks are registered in production as well
+try:
+    print("[Deploy 20.25] Registering shortage callbacks for production...")
+    dash_app.register_shortage_callbacks(app)
+    print("[Deploy 20.25] Shortage callbacks registered")
+except Exception as e:
+    # Do not crash production boot if optional group fails; log and continue
+    print(f"[Deploy 20.25] WARNING: Failed to register shortage callbacks: {e}")
+
 # Flask serverをGunicorn用に公開
 server = app.server
 
