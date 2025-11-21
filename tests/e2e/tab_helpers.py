@@ -46,6 +46,9 @@ TAB_CONTAINER_MAP = {
 def click_tab(page: Page, tab_name: str, timeout: int = 30000) -> None:
     """Click a tab by name and wait for its container to be visible.
 
+    Uses value direct update method to ensure main-tabs.value is properly updated,
+    which triggers the Dash callback chain.
+
     Args:
         page: Playwright page object
         tab_name: Tab name (e.g., 'heatmap', 'shortage')
@@ -61,18 +64,41 @@ def click_tab(page: Page, tab_name: str, timeout: int = 30000) -> None:
     tab_index = TAB_MAP[tab_name]
     container_id = TAB_CONTAINER_MAP[tab_name]
 
-    # Get the tab value name for Dash
-    tab_values = ['overview', 'heatmap', 'shortage', 'individual', 'team',
+    # Get the tab value name for Dash (must match app's main-tabs value definitions)
+    # Correct values from dash_app.py:8365 and update_tab_visibility
+    tab_values = ['overview', 'heatmap', 'shortage', 'individual_analysis', 'team_analysis',
                   'fatigue', 'leave', 'fairness', 'optimization', 'forecast',
-                  'hire-plan', 'cost', 'gap', 'blueprint', 'logic']
+                  'hire_plan', 'cost', 'gap', 'blueprint_analysis', 'logic_analysis']
     tab_value = tab_values[tab_index]
 
-    # Click the tab using the tab value selector
-    # dcc.Tabs uses div[data-value] for tab selection
-    selector = f'#main-tabs > div.tab:nth-child({tab_index + 1})'
+    # Method A: Use dash_clientside.set_props to directly update main-tabs.value
+    # This ensures the Dash callback chain is triggered properly
+    js_code = """() => {
+        try {
+            // Try dash_clientside.set_props first (most reliable for Dash)
+            if (window.dash_clientside && window.dash_clientside.set_props) {
+                window.dash_clientside.set_props('main-tabs', {value: '%s'});
+                return {success: true, method: 'set_props'};
+            }
 
-    # Try clicking the tab element
-    page.click(selector)
+            // Fallback: DOM click
+            const selector = '#main-tabs > div.tab:nth-child(%d)';
+            const tabEl = document.querySelector(selector);
+            if (tabEl) {
+                tabEl.click();
+                return {success: true, method: 'dom_click'};
+            }
+
+            return {success: false, error: 'No method worked'};
+        } catch (err) {
+            return {success: false, error: err.message};
+        }
+    }""" % (tab_value, tab_index + 1)
+
+    result = page.evaluate(js_code)
+
+    if not result.get('success'):
+        raise RuntimeError(f"Failed to switch tab: {result.get('error', 'Unknown error')}")
 
     # Wait for callback to process
     page.wait_for_timeout(3000)

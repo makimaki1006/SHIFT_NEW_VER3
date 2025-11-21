@@ -6154,6 +6154,35 @@ def _generate_individual_basic_analysis(selected_staff: str) -> html.Div:
     ])
 
 
+def _indv_kpi_card(label: str, value: str, color: str = '#e67e22'):
+    """個人分析タブ用のKPIカードヘルパー"""
+    return html.Div(className='kpi-card', children=[
+        html.H4(label),
+        html.Div(value, className='value', style={'color': color})
+    ])
+
+
+def _apply_individual_fig_style(fig):
+    """個人分析タブ用のPlotly図スタイル統一ヘルパー"""
+    try:
+        fig.update_layout(
+            height=520,
+            template='plotly_white',
+            margin=dict(t=48, r=24, b=48, l=24),
+            legend=dict(orientation='h', x=0, y=-0.2),
+            hovermode='x unified',
+            font=dict(size=13)
+        )
+        for tr in fig.data:
+            if hasattr(tr, 'marker') and tr.marker:
+                tr.marker.update(line=dict(width=1))
+            if hasattr(tr, 'line') and tr.line:
+                tr.line.update(width=1.5)
+    except Exception:
+        pass
+    return fig
+
+
 def _generate_individual_analysis_with_synergy(selected_staff: str, synergy_type: str = 'basic') -> html.Div:
     """
     職員個別分析（シナジー分析含む）を生成する
@@ -6654,10 +6683,7 @@ def create_individual_analysis_tab() -> html.Div:
             ])
         ], style={'marginBottom': '20px', 'padding': '10px', 'backgroundColor': '#f8f9fa', 'borderRadius': '5px'}),
 
-        html.Div(
-            id='individual-analysis-content',
-            children=default_content
-        )
+        default_content  # ID removed to avoid duplication with outer container
     ])
 
 
@@ -8605,31 +8631,47 @@ def update_tab_visibility(active_tab, selected_scenario, data_status):
     Output('overview-content', 'children'),
     [Input('overview-tab-container', 'style'),
      Input('scenario-dropdown', 'value')],
-    State('data-loaded', 'data'),
+    [State('data-loaded', 'data'),
+     State('session-id', 'data')],
 )
 @safe_callback
-def initialize_overview_content(style, selected_scenario, data_status):
-    """概要タブの内容を初期化"""
+def initialize_overview_content(style, selected_scenario, data_status, session_id):
+    """概要タブの内容を初期化 (page_overview経由で文脈付きデータ取得)"""
     if not selected_scenario or not data_status or style.get('display') == 'none':
         raise PreventUpdate
     try:
-        return create_overview_tab(selected_scenario)
+        # セッション取得
+        session = get_session(session_id)
+        if not session:
+            return html.Div("セッションが見つかりません", style={'color': 'red'})
+
+        # metadata作成してpage_overviewを呼び出し
+        metadata = {'scenario': selected_scenario, 'token': session_id}
+        return page_overview(session, metadata)
     except Exception as e:
         log.error(f"概要タブの初期化エラー: {str(e)}")
         return html.Div(f"エラーが発生しました: {str(e)}", style={'color': 'red'})
 @app.callback(
     Output('heatmap-content', 'children'),
     Input('heatmap-tab-container', 'style'),
-    State('scenario-dropdown', 'value'),
-    State('data-loaded', 'data'),
+    [State('scenario-dropdown', 'value'),
+     State('data-loaded', 'data'),
+     State('session-id', 'data')],
 )
 @safe_callback
-def initialize_heatmap_content(style, selected_scenario, data_status):
-    """ヒートマップタブの内容を初期化"""
+def initialize_heatmap_content(style, selected_scenario, data_status, session_id):
+    """ヒートマップタブの内容を初期化 (page_heatmap経由で文脈付きデータ取得)"""
     if not selected_scenario or not data_status or style.get('display') == 'none':
         raise PreventUpdate
     try:
-        return create_heatmap_tab()
+        # セッション取得
+        session = get_session(session_id)
+        if not session:
+            return html.Div("セッションが見つかりません", style={'color': 'red'})
+
+        # metadata作成してpage_heatmapを呼び出し
+        metadata = {'scenario': selected_scenario, 'token': session_id}
+        return page_heatmap(session, metadata)
     except Exception as e:
         log.error(f"ヒートマップタブの初期化エラー: {str(e)}")
         return html.Div(f"エラーが発生しました: {str(e)}", style={'color': 'red'})
@@ -8637,208 +8679,306 @@ def initialize_heatmap_content(style, selected_scenario, data_status):
     Output('shortage-content', 'children'),
     [Input('shortage-tab-container', 'style'),
      Input('scenario-dropdown', 'value')],
-    State('data-loaded', 'data'),
+    [State('data-loaded', 'data'),
+     State('session-id', 'data')],
 )
 @safe_callback
-def initialize_shortage_content(style, selected_scenario, data_status):
-    """不足分析タブの内容を初期化"""
-    log.info(f"[shortage_tab] 初期化開始 - scenario: {selected_scenario}, data_status: {data_status}, style: {style}")
-#     if not selected_scenario or not data_status or style.get('display') == 'none':
-#         log.info("[shortage_tab] PreventUpdate - 条件不満足")
-#         raise PreventUpdate
-#     try:
-#         log.info("[shortage_tab] create_shortage_tab呼び出し開始")
-#         result = create_shortage_tab(selected_scenario)
-#         log.info("[shortage_tab] create_shortage_tab完了")
-#         return result
-#     except Exception as e:
-#         log.error(f"不足分析タブの初期化エラー: {str(e)}")
-#         import traceback
-#         log.error(f"不足分析タブ詳細エラー: {traceback.format_exc()}")
-#         return html.Div(f"エラーが発生しました: {str(e)}", style={'color': 'red'})
-# 
+def initialize_shortage_content(style, selected_scenario, data_status, session_id):
+    """不足分析タブの内容を初期化 (page_shortage経由で文脈付きデータ取得)"""
+    log.info(f"[shortage_tab] 初期化開始 - scenario: {selected_scenario}, data_status: {data_status}, style: {style}, session_id: {session_id}")
+    if not selected_scenario or not data_status or style.get('display') == 'none':
+        log.info("[shortage_tab] PreventUpdate - 条件不満足")
+        raise PreventUpdate
+    try:
+        # セッション取得
+        session = get_session(session_id)
+        if not session:
+            log.error("[shortage_tab] セッションが見つかりません")
+            return html.Div("セッションが見つかりません", style={'color': 'red'})
+
+        # metadata作成してpage_shortageを呼び出し
+        metadata = {'scenario': selected_scenario, 'token': session_id}
+        log.info(f"[shortage_tab] page_shortage呼び出し開始 - metadata: {metadata}")
+        result = page_shortage(session, metadata)
+        log.info("[shortage_tab] page_shortage完了")
+        return result
+    except Exception as e:
+        log.error(f"不足分析タブの初期化エラー: {str(e)}")
+        import traceback
+        log.error(f"不足分析タブ詳細エラー: {traceback.format_exc()}")
+        return html.Div(f"エラーが発生しました: {str(e)}", style={'color': 'red'})
+
 @app.callback(
     Output('optimization-content', 'children', allow_duplicate=True),
     Input('optimization-tab-container', 'style'),
-    State('scenario-dropdown', 'value'),
-    State('data-loaded', 'data'),
+    [State('scenario-dropdown', 'value'),
+     State('data-loaded', 'data'),
+     State('session-id', 'data')],
     prevent_initial_call=True
 )
 @safe_callback
-def initialize_optimization_content(style, selected_scenario, data_status):
-    """最適化分析タブの内容を初期化"""
+def initialize_optimization_content(style, selected_scenario, data_status, session_id):
+    """最適化分析タブの内容を初期化 (page_optimization経由で文脈付きデータ取得)"""
     if not selected_scenario or not data_status or style.get('display') == 'none':
         raise PreventUpdate
     try:
-        return create_optimization_tab()
+        # セッション取得
+        session = get_session(session_id)
+        if not session:
+            return html.Div("セッションが見つかりません", style={'color': 'red'})
+
+        # metadata作成してpage_optimizationを呼び出し
+        metadata = {'scenario': selected_scenario, 'token': session_id}
+        return page_optimization(session, metadata)
     except Exception as e:
         log.error(f"最適化分析タブの初期化エラー: {str(e)}")
         return html.Div(f"エラーが発生しました: {str(e)}", style={'color': 'red'})
 @app.callback(
     Output('leave-content', 'children'),
     Input('leave-tab-container', 'style'),
-    State('scenario-dropdown', 'value'),
-    State('data-loaded', 'data'),
+    [State('scenario-dropdown', 'value'),
+     State('data-loaded', 'data'),
+     State('session-id', 'data')],
 )
 @safe_callback
-def initialize_leave_content(style, selected_scenario, data_status):
-    """休暇分析タブの内容を初期化"""
-    log.info(f"[leave_tab] 初期化開始 - scenario: {selected_scenario}, data_status: {data_status}, style: {style}")
-#     if not selected_scenario or not data_status or style.get('display') == 'none':
-#         log.info("[leave_tab] PreventUpdate - 条件不満足")
-#         raise PreventUpdate
-#     try:
-#         log.info("[leave_tab] create_leave_analysis_tab呼び出し開始")
-#         result = create_leave_analysis_tab()
-#         log.info("[leave_tab] create_leave_analysis_tab完了")
-#         return result
-#     except Exception as e:
-#         log.error(f"休暇分析タブの初期化エラー: {str(e)}")
-#         import traceback
-#         log.error(f"休暇分析タブ詳細エラー: {traceback.format_exc()}")
-#         return html.Div(f"エラーが発生しました: {str(e)}", style={'color': 'red'})
-# 
+def initialize_leave_content(style, selected_scenario, data_status, session_id):
+    """休暇分析タブの内容を初期化 (page_leave経由で文脈付きデータ取得)"""
+    log.info(f"[leave_tab] 初期化開始 - scenario: {selected_scenario}, data_status: {data_status}, style: {style}, session_id: {session_id}")
+    if not selected_scenario or not data_status or style.get('display') == 'none':
+        log.info("[leave_tab] PreventUpdate - 条件不満足")
+        raise PreventUpdate
+    try:
+        # セッション取得
+        session = get_session(session_id)
+        if not session:
+            log.error("[leave_tab] セッションが見つかりません")
+            return html.Div("セッションが見つかりません", style={'color': 'red'})
+
+        # metadata作成してpage_leaveを呼び出し
+        metadata = {'scenario': selected_scenario, 'token': session_id}
+        log.info(f"[leave_tab] page_leave呼び出し開始 - metadata: {metadata}")
+        result = page_leave(session, metadata)
+        log.info("[leave_tab] page_leave完了")
+        return result
+    except Exception as e:
+        log.error(f"休暇分析タブの初期化エラー: {str(e)}")
+        import traceback
+        log.error(f"休暇分析タブ詳細エラー: {traceback.format_exc()}")
+        return html.Div(f"エラーが発生しました: {str(e)}", style={'color': 'red'})
+
 @app.callback(
     Output('cost-content', 'children'),
     Input('cost-tab-container', 'style'),
-    State('scenario-dropdown', 'value'),
-    State('data-loaded', 'data'),
+    [State('scenario-dropdown', 'value'),
+     State('data-loaded', 'data'),
+     State('session-id', 'data')],
 )
 @safe_callback
-def initialize_cost_content(style, selected_scenario, data_status):
-    """コスト分析タブの内容を初期化"""
+def initialize_cost_content(style, selected_scenario, data_status, session_id):
+    """コスト分析タブの内容を初期化 (page_cost経由で文脈付きデータ取得)"""
     if not selected_scenario or not data_status or style.get('display') == 'none':
         raise PreventUpdate
     try:
-        return create_cost_analysis_tab()
+        # セッション取得
+        session = get_session(session_id)
+        if not session:
+            return html.Div("セッションが見つかりません", style={'color': 'red'})
+
+        # metadata作成してpage_costを呼び出し
+        metadata = {'scenario': selected_scenario, 'token': session_id}
+        return page_cost(session, metadata)
     except Exception as e:
         log.error(f"コスト分析タブの初期化エラー: {str(e)}")
         return html.Div(f"エラーが発生しました: {str(e)}", style={'color': 'red'})
 @app.callback(
     Output('hire-plan-content', 'children'),
     Input('hire-plan-tab-container', 'style'),
-    State('scenario-dropdown', 'value'),
-    State('data-loaded', 'data'),
+    [State('scenario-dropdown', 'value'),
+     State('data-loaded', 'data'),
+     State('session-id', 'data')],
 )
 @safe_callback
-def initialize_hire_plan_content(style, selected_scenario, data_status):
-    """採用計画タブの内容を初期化"""
+def initialize_hire_plan_content(style, selected_scenario, data_status, session_id):
+    """採用計画タブの内容を初期化 (page_hire_plan経由で文脈付きデータ取得)"""
     if not selected_scenario or not data_status or style.get('display') == 'none':
         raise PreventUpdate
     try:
-        return create_hire_plan_tab()
+        # セッション取得
+        session = get_session(session_id)
+        if not session:
+            return html.Div("セッションが見つかりません", style={'color': 'red'})
+
+        # metadata作成してpage_hire_planを呼び出し
+        metadata = {'scenario': selected_scenario, 'token': session_id}
+        return page_hire_plan(session, metadata)
     except Exception as e:
         log.error(f"採用計画タブの初期化エラー: {str(e)}")
         return html.Div(f"エラーが発生しました: {str(e)}", style={'color': 'red'})
 @app.callback(
     Output('fatigue-content', 'children'),
     Input('fatigue-tab-container', 'style'),
-    State('scenario-dropdown', 'value'),
-    State('data-loaded', 'data'),
+    [State('scenario-dropdown', 'value'),
+     State('data-loaded', 'data'),
+     State('session-id', 'data')],
 )
 @safe_callback
-def initialize_fatigue_content(style, selected_scenario, data_status):
-    """疲労分析タブの内容を初期化"""
+def initialize_fatigue_content(style, selected_scenario, data_status, session_id):
+    """疲労分析タブの内容を初期化 (page_fatigue経由で文脈付きデータ取得)"""
     if not selected_scenario or not data_status or style.get('display') == 'none':
         raise PreventUpdate
     try:
-        return create_fatigue_tab()
+        # セッション取得
+        session = get_session(session_id)
+        if not session:
+            return html.Div("セッションが見つかりません", style={'color': 'red'})
+
+        # metadata作成してpage_fatigueを呼び出し
+        metadata = {'scenario': selected_scenario, 'token': session_id}
+        return page_fatigue(session, metadata)
     except Exception as e:
         log.error(f"疲労分析タブの初期化エラー: {str(e)}")
         return html.Div(f"エラーが発生しました: {str(e)}", style={'color': 'red'})
 @app.callback(
     Output('forecast-content', 'children'),
     Input('forecast-tab-container', 'style'),
-    State('scenario-dropdown', 'value'),
-    State('data-loaded', 'data'),
+    [State('scenario-dropdown', 'value'),
+     State('data-loaded', 'data'),
+     State('session-id', 'data')],
 )
 @safe_callback
-def initialize_forecast_content(style, selected_scenario, data_status):
-    """需要予測タブの内容を初期化"""
+def initialize_forecast_content(style, selected_scenario, data_status, session_id):
+    """需要予測タブの内容を初期化 (page_forecast経由で文脈付きデータ取得)"""
     if not selected_scenario or not data_status or style.get('display') == 'none':
         raise PreventUpdate
     try:
-        return create_forecast_tab()
+        # セッション取得
+        session = get_session(session_id)
+        if not session:
+            return html.Div("セッションが見つかりません", style={'color': 'red'})
+
+        # metadata作成してpage_forecastを呼び出し
+        metadata = {'scenario': selected_scenario, 'token': session_id}
+        return page_forecast(session, metadata)
     except Exception as e:
         log.error(f"需要予測タブの初期化エラー: {str(e)}")
         return html.Div(f"エラーが発生しました: {str(e)}", style={'color': 'red'})
 @app.callback(
     Output('fairness-content', 'children'),
     Input('fairness-tab-container', 'style'),
-    State('scenario-dropdown', 'value'),
-    State('data-loaded', 'data'),
+    [State('scenario-dropdown', 'value'),
+     State('data-loaded', 'data'),
+     State('session-id', 'data')],
 )
 @safe_callback
-def initialize_fairness_content(style, selected_scenario, data_status):
-    """公平性タブの内容を初期化"""
+def initialize_fairness_content(style, selected_scenario, data_status, session_id):
+    """公平性タブの内容を初期化 (page_fairness経由で文脈付きデータ取得)"""
     if not selected_scenario or not data_status or style.get('display') == 'none':
         raise PreventUpdate
     try:
-        return create_fairness_tab()
+        # セッション取得
+        session = get_session(session_id)
+        if not session:
+            return html.Div("セッションが見つかりません", style={'color': 'red'})
+
+        # metadata作成してpage_fairnessを呼び出し
+        metadata = {'scenario': selected_scenario, 'token': session_id}
+        return page_fairness(session, metadata)
     except Exception as e:
         log.error(f"公平性タブの初期化エラー: {str(e)}")
         return html.Div(f"エラーが発生しました: {str(e)}", style={'color': 'red'})
 @app.callback(
     Output('gap-content', 'children'),
     Input('gap-tab-container', 'style'),
-    State('scenario-dropdown', 'value'),
-    State('data-loaded', 'data'),
+    [State('scenario-dropdown', 'value'),
+     State('data-loaded', 'data'),
+     State('session-id', 'data')],
 )
 @safe_callback
-def initialize_gap_content(style, selected_scenario, data_status):
-    """基準乖離分析タブの内容を初期化"""
+def initialize_gap_content(style, selected_scenario, data_status, session_id):
+    """基準乖離分析タブの内容を初期化 (page_gap_analysis経由で文脈付きデータ取得)"""
     if not selected_scenario or not data_status or style.get('display') == 'none':
         raise PreventUpdate
     try:
-        return create_gap_analysis_tab()
+        # セッション取得
+        session = get_session(session_id)
+        if not session:
+            return html.Div("セッションが見つかりません", style={'color': 'red'})
+
+        # metadata作成してpage_gap_analysisを呼び出し
+        metadata = {'scenario': selected_scenario, 'token': session_id}
+        return page_gap_analysis(session, metadata)
     except Exception as e:
         log.error(f"基準乖離分析タブの初期化エラー: {str(e)}")
         return html.Div(f"エラーが発生しました: {str(e)}", style={'color': 'red'})
 @app.callback(
     Output('team-analysis-content', 'children'),
     Input('team-analysis-tab-container', 'style'),
-    State('scenario-dropdown', 'value'),
-    State('data-loaded', 'data'),
+    [State('scenario-dropdown', 'value'),
+     State('data-loaded', 'data'),
+     State('session-id', 'data')],
 )
 @safe_callback
-def initialize_team_analysis_content(style, selected_scenario, data_status):
-    """チーム分析タブの内容を初期化"""
+def initialize_team_analysis_content(style, selected_scenario, data_status, session_id):
+    """チーム分析タブの内容を初期化 (page_team経由で文脈付きデータ取得)"""
     if not selected_scenario or not data_status or style.get('display') == 'none':
         raise PreventUpdate
     try:
-        return create_team_analysis_tab()
+        # セッション取得
+        session = get_session(session_id)
+        if not session:
+            return html.Div("セッションが見つかりません", style={'color': 'red'})
+
+        # metadata作成してpage_teamを呼び出し
+        metadata = {'scenario': selected_scenario, 'token': session_id}
+        return page_team(session, metadata)
     except Exception as e:
         log.error(f"チーム分析タブの初期化エラー: {str(e)}")
         return html.Div(f"エラーが発生しました: {str(e)}", style={'color': 'red'})
 @app.callback(
     Output('blueprint-analysis-content', 'children'),
     Input('blueprint-analysis-tab-container', 'style'),
-    State('scenario-dropdown', 'value'),
-    State('data-loaded', 'data'),
+    [State('scenario-dropdown', 'value'),
+     State('data-loaded', 'data'),
+     State('session-id', 'data')],
 )
 @safe_callback
-def initialize_blueprint_analysis_content(style, selected_scenario, data_status):
-    """作成ブループリントタブの内容を初期化"""
+def initialize_blueprint_analysis_content(style, selected_scenario, data_status, session_id):
+    """作成ブループリントタブの内容を初期化 (page_blueprint経由で文脈付きデータ取得)"""
     if not selected_scenario or not data_status or style.get('display') == 'none':
         raise PreventUpdate
     try:
-        return create_blueprint_analysis_tab()
+        # セッション取得
+        session = get_session(session_id)
+        if not session:
+            return html.Div("セッションが見つかりません", style={'color': 'red'})
+
+        # metadata作成してpage_blueprintを呼び出し
+        metadata = {'scenario': selected_scenario, 'token': session_id}
+        return page_blueprint(session, metadata)
     except Exception as e:
         log.error(f"作成ブループリントタブの初期化エラー: {str(e)}")
         return html.Div(f"エラーが発生しました: {str(e)}", style={'color': 'red'})
 @app.callback(
     Output('logic-analysis-content', 'children'),
     Input('logic-analysis-tab-container', 'style'),
-    State('scenario-dropdown', 'value'),
-    State('data-loaded', 'data'),
+    [State('scenario-dropdown', 'value'),
+     State('data-loaded', 'data'),
+     State('session-id', 'data')],
 )
 @safe_callback
-def initialize_logic_analysis_content(style, selected_scenario, data_status):
-    """ロジック解明タブの内容を初期化"""
+def initialize_logic_analysis_content(style, selected_scenario, data_status, session_id):
+    """ロジック解明タブの内容を初期化 (page_logic経由で文脈付きデータ取得)"""
     if not selected_scenario or not data_status or style.get('display') == 'none':
         raise PreventUpdate
     try:
-        return create_creation_logic_analysis_tab()
+        # セッション取得
+        session = get_session(session_id)
+        if not session:
+            return html.Div("セッションが見つかりません", style={'color': 'red'})
+
+        # metadata作成してpage_logicを呼び出し
+        metadata = {'scenario': selected_scenario, 'token': session_id}
+        return page_logic(session, metadata)
     except Exception as e:
         log.error(f"ロジック解明タブの初期化エラー: {str(e)}")
         return html.Div(f"エラーが発生しました: {str(e)}", style={'color': 'red'})
@@ -8846,17 +8986,25 @@ def initialize_logic_analysis_content(style, selected_scenario, data_status):
 @app.callback(
     Output('individual-analysis-content', 'children', allow_duplicate=True),
     Input('individual-analysis-tab-container', 'style'),
-    State('scenario-dropdown', 'value'),
-    State('data-loaded', 'data'),
+    [State('scenario-dropdown', 'value'),
+     State('data-loaded', 'data'),
+     State('session-id', 'data')],
     prevent_initial_call=True
 )
 @safe_callback
-def initialize_individual_analysis_content(style, selected_scenario, data_status):
-    """職員個別分析タブの内容を初期化"""
+def initialize_individual_analysis_content(style, selected_scenario, data_status, session_id):
+    """職員個別分析タブの内容を初期化 (page_individual経由で文脈付きデータ取得)"""
     if not selected_scenario or not data_status or style.get('display') == 'none':
         raise PreventUpdate
     try:
-        return create_individual_analysis_tab()
+        # セッション取得
+        session = get_session(session_id)
+        if not session:
+            return html.Div("セッションが見つかりません", style={'color': 'red'})
+
+        # metadata作成してpage_individualを呼び出し
+        metadata = {'scenario': selected_scenario, 'token': session_id}
+        return page_individual(session, metadata)
     except Exception as e:
         log.error(f"職員個別分析タブの初期化エラー: {str(e)}")
         return html.Div(f"エラーが発生しました: {str(e)}", style={'color': 'red'})
@@ -10524,19 +10672,27 @@ def _unused_update_progress_bar(n_intervals, progress_data):
 
 
 # 🧠 AI分析タブのコールバック
-# @app.callback(
-#     Output('ai-analysis-content', 'children'),
-#     Input('ai-analysis-tab-container', 'style'),
-#     State('scenario-dropdown', 'value'),
-#     State('data-loaded', 'data'),
-# )
+@app.callback(
+    Output('ai-analysis-content', 'children'),
+    Input('ai-analysis-tab-container', 'style'),
+    [State('scenario-dropdown', 'value'),
+     State('data-loaded', 'data'),
+     State('session-id', 'data')],
+)
 @safe_callback
-def initialize_ai_analysis_content(style, selected_scenario, data_status):
-    """AI分析タブの内容を初期化"""
+def initialize_ai_analysis_content(style, selected_scenario, data_status, session_id):
+    """AI分析タブの内容を初期化 (page_ai_analysis経由で文脈付きデータ取得)"""
     if not selected_scenario or not data_status or style.get('display') == 'none':
         raise PreventUpdate
     try:
-        return create_ai_analysis_tab()
+        # セッション取得
+        session = get_session(session_id)
+        if not session:
+            return html.Div("セッションが見つかりません", style={'color': 'red'})
+
+        # metadata作成してpage_ai_analysisを呼び出し
+        metadata = {'scenario': selected_scenario, 'token': session_id}
+        return page_ai_analysis(session, metadata)
     except Exception as e:
         log.error(f"AI分析タブの初期化エラー: {str(e)}")
         return html.Div(f"エラーが発生しました: {str(e)}", style={'color': 'red'})
@@ -11007,6 +11163,25 @@ def page_blueprint(session: SessionData, metadata: Optional[dict]) -> html.Div:
 
 def page_logic(session: SessionData, metadata: Optional[dict]) -> html.Div:
     """Creation logic tab wrapper - bridges session interface to existing AI analysis tab."""
+    scenario_name = metadata.get("scenario") if metadata else None
+    session_id = metadata.get("token") if metadata else None  # Use token as session_id
+    _, scenario = session.get_scenario_data(scenario_name)
+    old_dir = _get_current_scenario_dir()
+    old_session_id = _get_current_session_id()
+    old_slot_info = _get_current_slot_info()  # Phase 1: Deploy 20.17
+    _set_current_scenario_dir(scenario.root_path)
+    _set_current_session_id(session_id)
+    _set_current_slot_info(session.slot_info)  # Phase 1: Deploy 20.17
+    try:
+        return create_ai_analysis_tab()
+    finally:
+        _set_current_scenario_dir(old_dir)
+        _set_current_session_id(old_session_id)
+        _set_current_slot_info(old_slot_info)  # Phase 1: Deploy 20.17
+
+
+def page_ai_analysis(session: SessionData, metadata: Optional[dict]) -> html.Div:
+    """AI analysis tab wrapper - bridges session interface to existing AI analysis tab."""
     scenario_name = metadata.get("scenario") if metadata else None
     session_id = metadata.get("token") if metadata else None  # Use token as session_id
     _, scenario = session.get_scenario_data(scenario_name)

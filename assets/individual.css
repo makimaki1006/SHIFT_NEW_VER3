@@ -1,0 +1,91 @@
+/* 個人分析タブ 全体の読みやすさを底上げ */
+#individual-analysis-tab-container {
+    font-size: 14px;
+    line-height: 1.6;
+    color: #333;
+}
+
+/* コンテンツを中央に寄せて最大幅を制限（既存構造どおり直下のdiv群を包む） */
+#individual-analysis-tab-container > div {
+    max-width: 1360px;  /* 1200〜1440の範囲でお好み調整可 */
+    margin: 0 auto;
+    padding: 8px 16px;
+}
+
+/* 1段目の4ブロックを横並びにしたいときに使うクラス（後述のPythonで付与推奨） */
+.indv-grid-4 {
+    display: grid;
+    grid-template-columns: 280px 1fr 1fr 320px;
+    gap: 16px;
+}
+
+/* レスポンシブ崩し方 */
+@media (max-width: 1200px) {
+    .indv-grid-4 {
+        grid-template-columns: 280px 1fr 1fr;
+    }
+}
+
+@media (max-width: 900px) {
+    .indv-grid-4 {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* KPIカードの共通スタイル */
+.kpi-card {
+    padding: 16px 20px;
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    border: 1px solid #eee;
+    margin-bottom: 12px;
+}
+
+.kpi-card h4 {
+    margin: 0 0 6px 0;
+    font-size: 14px;
+    color: #666;
+}
+
+.kpi-card .value {
+    font-size: 28px;
+    font-weight: 700;
+    color: #e67e22; /* 指標によりクラスで色を切替可 */
+}
+
+/* テーブルパネル（スクショの2テーブル） */
+.table-panel {
+    background: #fff;
+    border-radius: 10px;
+    border: 1px solid #eee;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    padding: 10px 12px;
+}
+
+.table-panel h4 {
+    margin: 6px 6px 10px 6px;
+    font-size: 15px;
+    color: #444;
+}
+
+.table-panel .dash-table-container .dash-spreadsheet-container {
+    max-height: 520px;
+    overflow: auto;
+}
+
+.table-panel td,
+.table-panel th {
+    white-space: normal !important;
+    word-break: break-word !important;
+}
+
+/* Plotly図の見栄え（凡例を下・横並び、余白を揃える） */
+.plotly-container {
+    background: #fff;
+    border-radius: 10px;
+    border: 1px solid #eee;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    padding: 8px 8px 0 8px;
+    margin-top: 12px;
+}
