@@ -9376,6 +9376,11 @@ def register_shortage_callbacks(app_instance):
             log.info(f"Trying original key: {original_heat_key}")
             df_heat = data_get(original_heat_key, pd.DataFrame())
 
+        # Deploy 20.25: heat_all が空の場合、heat_ALL へのフォールバック（最適化タブと同じ修正）
+        if df_heat.empty and heat_key == 'heat_all':
+            log.info("[Shortage] heat_all is empty, trying heat_ALL fallback")
+            df_heat = data_get('heat_ALL', pd.DataFrame())
+
         if df_heat.empty:
             # より詳細なエラーメッセージと診断情報を提供
             available_keys = [k for k in DATA_CACHE.keys() if k.startswith('heat_')]
@@ -9402,7 +9407,13 @@ def register_shortage_callbacks(app_instance):
                 ])
             ])
 
-        date_cols = [c for c in df_heat.columns if pd.to_datetime(c, errors='coerce') is not pd.NaT]
+        # Deploy 20.25: 日付列抽出のロバスト化（最適化タブと同じ修正）
+        dates = pd.to_datetime(pd.Index(df_heat.columns), errors='coerce')
+        date_cols = [c for c, d in zip(df_heat.columns, dates) if pd.notna(d)]
+
+        if not date_cols:
+            return html.Div("日付データが見つかりません。")
+
         staff_df = df_heat[date_cols]
     
         log.info(f"Initial staff_df shape: {staff_df.shape}, index: {staff_df.index.name}, columns: {len(staff_df.columns)}")
