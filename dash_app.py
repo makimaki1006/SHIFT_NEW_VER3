@@ -10033,21 +10033,25 @@ def update_blueprint_analysis_content(n_clicks, analysis_type, session_id, metad
         print("[Blueprint DEBUG] PreventUpdate raised: n_clicks or session_id is None")
         raise PreventUpdate
 
-    # セーフモード: 失敗時の業務影響を避けるため、既定で最小出力にフォールバック
-    # 環境変数 BLUEPRINT_SAFE_MODE=0 で無効化できます
-    safe_mode = os.environ.get('BLUEPRINT_SAFE_MODE', '1') == '1'
-    if safe_mode:
-        log.warning("[Blueprint] SAFE MODE ON - returning minimal outputs")
+    # Deploy 20.28: セーフモードをエラー時のみのフォールバックに変更
+    # - 通常は実際のブループリント分析を実行
+    # - エラー発生時のみ最小出力にフォールバック（10401-10405行目のexceptブロック）
+    # - 環境変数 BLUEPRINT_SAFE_MODE=1 で旧セーフモード動作（分析スキップ）に戻すことも可能
+
+    safe_mode_skip = os.environ.get('BLUEPRINT_SAFE_MODE', '0') == '1'
+    if safe_mode_skip:
+        log.warning("[Blueprint] SAFE MODE (SKIP) ON - 分析をスキップして最小出力を返します")
         try:
             empty_fig = go.Figure().to_plotly_json()
         except Exception:
             empty_fig = {}
         safe_msg = html.Div(
-            "ブループリント分析はセーフモードで最小表示中です",
+            "ブループリント分析はセーフモード（スキップ）で最小表示中です",
             style={'color': '#666', 'padding': '12px'}
         )
         return {}, empty_fig, [], [], [], safe_msg, safe_msg
 
+    # 通常フロー: ブループリント分析を実行（エラー時は10401-10405行目でフォールバック）
     # セッション情報を明示的に設定
     session = get_session(session_id)
     if not session:
