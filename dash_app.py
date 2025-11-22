@@ -10075,7 +10075,7 @@ def update_blueprint_analysis_content(n_clicks, analysis_type, session_id, metad
         log.warning(f"[Blueprint] シナリオ名が未設定: metadata={metadata}")
         scenario_name = 'out_mean_based'  # デフォルト
 
-    scenario = session.get_scenario(scenario_name)
+    scenario = session.get_scenario_data(scenario_name)
     if not scenario:
         log.error(f"[Blueprint] シナリオが見つかりません: scenario_name={scenario_name}")
         empty_fig = go.Figure()
